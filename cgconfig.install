@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+# Install cgroup configuration
+# Copyright (C) 2025 Mario Roy
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# See the included GNU General Public License for more details.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+
+# Stop if running cgroup v1
+if [ $(stat -fc %T /sys/fs/cgroup/) = "tmpfs" ]; then
+    # If the output is tmpfs, the system is using cgroup v1
+    # If the output is cgroup2fs, the system is using cgroup v2
+    echo "This requires cgroup v2. Refer to OS guide for defaulting to v2."
+    exit 2
+elif [ ! -e "/sys/fs/cgroup/cgroup.controllers" ]; then
+    # If the file is not found, the system is likely using cgroup v1
+    echo "This requires cgroup v2. Refer to OS guide for defaulting to v2."
+    exit 2
+fi
+
+# Stop if the libcgroup package is not installed
+if [ ! -f "/etc/cgconfig.conf" ]; then
+    echo "This requires the libcgroup package. Please see README for details."
+    exit 2
+fi
+
+# Set uid and user values
+[ -n "$SUDO_UID" ] && uid=$SUDO_UID || uid=$UID
+[ -n "$SUDO_USER" ] && user=$SUDO_USER || user=$USER
+
+# Test sudo, exit if wrong password or terminated
+if [ -z "$SUDO_USER" ]; then
+    sudo true >/dev/null || exit 2
+fi
+
+flag=0
+
+###############################################################################
+# /etc/cgconfig.conf
+###############################################################################
+
+capacity=40
+if [ -n "$1" ]; then
+    if [[ "$1" =~ ^[0-9]+$ ]]; then
+        if [[ $1 -lt 30 ]]; then
+            capacity=30
+        elif [[ $1 -gt 260 ]]; then
+            capacity=260
+        else
+            capacity=$1
+        fi
+    else
+        echo "Invalid pool capacity specified. Please, try again."
+        exit 2
+    fi
+fi
+
+conf="/etc/cgconfig.conf"
+match="group user.slice/user-$uid.slice/term-"
+count=$(grep -sc "^$match" "$conf"); [ -z "$count" ] && count=0
+capacity=$(expr $capacity / 10)
+
+# Make a backup of cgconfig.conf
+if [[ $count -eq 0 && ! -e "/etc/cgconfig.conf.orig" ]]; then
+    sudo cp -a "/etc/cgconfig.conf" "/etc/cgconfig.conf.orig"
+fi
+
+# Populate cgconfig.conf with pre-defined cgroup entries
+if [ $count -ne $((capacity * 10 + 10)) ]; then
+    flag=1
+
+    # Purge existing entries: refer to cgconfig.uninstall for explanation
+    if [ $count -gt 0 ]; then
+        sudo perl -0777 -Mstrict -Mwarnings -e "
+my \$str;
+
+BEGIN {
+    \$str = <STDIN>;
+}
+
+END {
+    \$str =~ s!^group user\\.slice/user-$uid\\.slice/term-.*?^}\\n\\n?!!smg;
+    open my \$fh, '>', '$conf';
+    print \$fh \$str;
+    close \$fh;
+}
+        " < "$conf"
+    fi
+
+    # Add blank line separation
+    last_line=$(tail -1 "$conf" 2>/dev/null)
+    if [ -n "$last_line" ]; then
+        echo "" | sudo tee -a "$conf" &>/dev/null
+    fi
+
+    # Add/update cgroup entries
+    if [ $count -eq 0 ]; then
+        echo "Adding pool of cgroup entries to $conf"
+    else
+        echo "Updating pool of cgroup entries in $conf"
+    fi
+
+    for i in {0..9}; do
+        printf "group user.slice/user-$uid.slice/term-$i {\n"
+        printf "\tperm {\n"
+        printf "\t\tadmin {\n"
+        printf "\t\t\tuid = $user;\n"
+        printf "\t\t\tgid = $user;\n"
+        printf "\t\t}\n"
+        printf "\t\ttask {\n"
+        printf "\t\t\ttuid = $user;\n"
+        printf "\t\t\ttgid = $user;\n"
+        printf "\t\t}\n"
+        printf "\t}\n"
+        printf "}\n"
+        printf "\n"
+
+        count=0
+        for suffix in {a..z}; do
+            count=$((count + 1))
+            [ $count -gt $capacity ] && break
+            printf "group user.slice/user-$uid.slice/term-${i}${suffix} {\n"
+            printf "\tperm {\n"
+            printf "\t\tadmin {\n"
+            printf "\t\t\tuid = $user;\n"
+            printf "\t\t\tgid = $user;\n"
+            printf "\t\t}\n"
+            printf "\t\ttask {\n"
+            printf "\t\t\ttuid = $user;\n"
+            printf "\t\t\ttgid = $user;\n"
+            printf "\t\t}\n"
+            printf "\t}\n"
+            printf "}\n"
+            printf "\n"
+        done
+
+    done | sudo tee -a "$conf" &>/dev/null
+
+    # Display first entry
+    grep -m 1 "^$match" "$conf" -A 11 2>/dev/null
+    echo "..."
+else
+    echo "The pool of cgroup entries exists in $conf, nothing to do"
+fi
+
+###############################################################################
+# set-owner-cgroup-procs-[UID].service
+##############################################################################
+
+# Create a service to change the ancestor cgroup.procs ownership to user.
+service="set-owner-cgroup-procs-$UID.service"
+
+if [ ! -e "/etc/systemd/system/$service" ]; then
+    flag=1
+    echo "Adding and enabling $service"
+    read -r -d '' service_text << EOF
+[Unit]
+# To move a process from cgroup A to cgroup B, the user attempting
+# the move must have write permissions to the common ancestor of
+# both A and B.
+Description=Set ownership to user for the common ancestor cgroup.procs
+ 
+# The service should be able to start as soon as possible,
+# before any 'normal' services:
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=basic.target shutdown.target
+After=cgconfig.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/chown $UID /sys/fs/cgroup/user.slice/user-$UID.slice/cgroup.procs
+
+[Install]
+WantedBy=sysinit.target
+EOF
+
+    sudo mkdir -p "/etc/systemd/system"
+    echo "$service_text" | sudo tee -a "/etc/systemd/system/$service" &>/dev/null
+    sudo systemctl enable --now $service
+
+elif [ ! -e "/etc/systemd/system/sysinit.target.wants/$service" ]; then
+    flag=1
+    echo "Enabling $service"
+    sudo systemctl enable --now $service
+
+else
+    echo "The $service exists and enabled, nothing to do"
+fi
+
+###############################################################################
+# Reboot message
+###############################################################################
+
+if [ $flag -eq 1 ]; then
+    echo "Please reboot the machine for the changes to take effect"
+fi
+

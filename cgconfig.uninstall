@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# Uninstall cgroup configuration
+# Copyright (C) 2025 Mario Roy
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# See the included GNU General Public License for more details.
+
+# Set uid and user values
+[ -n "$SUDO_UID" ] && uid=$SUDO_UID || uid=$UID
+[ -n "$SUDO_USER" ] && user=$SUDO_USER || user=$USER
+
+# Test sudo, exit if wrong password or terminated
+if [ -z "$SUDO_USER" ]; then
+    sudo true >/dev/null || exit 2
+fi
+
+flag=0
+
+###############################################################################
+# /etc/cgconfig.conf
+###############################################################################
+
+conf="/etc/cgconfig.conf"
+match="group user.slice/user-$uid.slice/term-"
+count=$(grep -sc "^$match" "$conf"); [ -z "$count" ] && count=0
+
+if [ ! -e "$conf" ]; then
+    echo "The file $conf does not exists, nothing to do"
+elif [ $count -eq 0 ]; then
+    echo "The pool of cgroup entries is purged from $conf, nothing to do"
+else
+    flag=1
+    echo "Removing pool of cgroup entries from $conf"
+    grep -m 1 "^$match" "$conf" -A 11 2>/dev/null
+    echo "..."
+
+    # SED lacks non-greedy match capability. So, this is something for
+    # Perl or PCRE-compatible tools to handle.
+    #
+    # That is, remove each record ^group [pattern].*?^}\n\n? individually
+    #
+    # - the -0777 switch sets the input record separator $/ to undef
+    #   causing Perl to slurp the entire file at once into the variable
+    # - the -Mstrict and -Mwarnings load modules to enable strict and
+    #   warnings pragmas
+    # - the -e switch executes the given code
+    # - <STDIN> reads the entire file into the str variable
+    # - the string is modified using regular expression substitution;
+    #   with modifiers s, m, and g; pruning records that match pattern
+    #   s: treat the string as a single line
+    #   m: enable multi-line behavior of ^ and $ anchors
+    #   g: global match for finding all occurrences of the pattern
+    # - print the modified string to the file, simulating in-place edit
+
+    # Code wrapped inside double-quotes so that $uid and $conf are expanded
+    # This involves backslash $ and \ characters
+
+    sudo perl -0777 -Mstrict -Mwarnings -e "
+my \$str;
+
+BEGIN {
+    \$str = <STDIN>;
+}
+
+END {
+    \$str =~ s!^group user\\.slice/user-$uid\\.slice/term-.*?^}\\n\\n?!!smg;
+    open my \$fh, '>', '$conf';
+    print \$fh \$str;
+    close \$fh;
+}
+    " < "$conf"
+fi
+
+###############################################################################
+# set-owner-cgroup-procs-[UID].service
+###############################################################################
+
+service="set-owner-cgroup-procs-$UID.service"
+
+if [ ! -e "/etc/systemd/system/$service" ]; then
+    echo "The $service does not exists, nothing to do"
+elif [ -e "/etc/systemd/system/sysinit.target.wants/$service" ]; then
+    flag=1
+    echo "Disabling and removing $service"
+    sudo systemctl disable $service
+    sudo rm -f "/etc/systemd/system/$service"
+else
+    flag=1
+    echo "Removing $service"
+    sudo rm -f "/etc/systemd/system/$service"
+fi
+
+###############################################################################
+# Reboot message
+###############################################################################
+
+if [ $flag -eq 1 ]; then
+    echo "Please reboot the machine for the changes to take effect"
+fi
+
