@@ -36,25 +36,32 @@ function attach_shell_to_unique_cgroup
             return 0
     end
 
+    # If previously attached uniquely, do nothing.
+    set --local UID (id -u)
+    set --local match "/user.slice/user-$UID.slice/term-"
+    read -l cgroup < "/proc/self/cgroup"
+    if string match --quiet --regex "$match\d[a-z]\Z" "$cgroup"
+        return 0
+    end
+
+    # If the term-0/cgroup.procs file is missing, do nothing.
+    # Possibly /etc/cgconfig.conf lacking pre-defined entries or
+    # running cgroup v1.
+    set --local cgroot "/sys/fs/cgroup/user.slice/user-$UID.slice"
+    if not test -e "$cgroot/term-0/cgroup.procs"
+        return 0
+    end
+
     # If the UID of the cgroup.procs file is not $UID, do nothing.
     # To move a process from cgroup A to cgroup B, the user attempting
     # the move must have write permissions to the common ancestor of
     # both A and B.
-    set --local UID (id -u)
-    set --local cgroot "/sys/fs/cgroup/user.slice/user-$UID.slice"
     set --local uid (stat -c '%u' "$cgroot/cgroup.procs")
     if test "$uid" != "$UID"
         return 0
     end
 
-    # If the term-0/cgroup.procs file is missing, do nothing.
-    if not test -e "$cgroot/term-0/cgroup.procs"
-        # /etc/cgconfig.conf lacking pre-defined entries
-        # or possibly not running cgroup v2
-        return 0
-    end
-
-    # If the last_suffix is blank e.g. no term-* cgroups, do nothing.
+    # If the last_suffix is blank e.g. missing cgroups, do nothing.
     set --export last_suffix (ls -1d "$cgroot/term-0"* 2>/dev/null | tail -1)
     set last_suffix (string sub --start -1 $last_suffix)
     if test -z "$last_suffix"
@@ -128,8 +135,8 @@ function cgterm_attach
     # Display the shell cgroup.
     # If base cgroup, try attaching the shell to unique cgroup.
     set --local UID (id -u)
-    set --local match "/user-$UID.slice/term-"
-    set --local cgroup (cat "/proc/self/cgroup")
+    set --local match "/user.slice/user-$UID.slice/term-"
+    read -l cgroup < "/proc/self/cgroup"
     if string match --quiet --regex "$match\d[a-z]\Z" "$cgroup"
         echo "$cgroup"
     else
