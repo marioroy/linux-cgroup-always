@@ -63,9 +63,8 @@ Please reboot the machine for the changes to take effect
 
 **Shell Activation**
 
-Copy or append the env `attach_shell_to_unique_cgroup` file to your
-shell's function folder. Preferably, source the environment file
-near the top of your shell startup script for early activation.
+Preferably, source the environment file near the top of your shell
+startup script for early activation.
 
 ```bash
 # ~/.bashrc
@@ -77,6 +76,10 @@ source /path/to/env/attach_shell_to_unique_cgroup.fish
 # ~/.zshrc
 source /path/to/env/attach_shell_to_unique_cgroup.zsh
 ```
+
+Or copy the `attach_shell_to_unique_cgroup` env file to your shell
+function folder. Call the `attach_shell_to_unique_cgroup` function
+near the top of your shell startup script.
 
 **Verification**
 
