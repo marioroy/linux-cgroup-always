@@ -41,11 +41,11 @@ function attach_shell_to_unique_cgroup {
         return 0
     fi
 
-    # If the term-0/cgroup.procs file is missing, do nothing.
+    # If the term-0c/cgroup.procs file is missing, do nothing.
     # Possibly /etc/cgconfig.conf pre-defined entries missing or
     # running cgroup v1.
     local cgroot="/sys/fs/cgroup/user.slice/user-$UID.slice"
-    if [[ ! -e "$cgroot/term-0/cgroup.procs" ]]; then
+    if [[ ! -e "$cgroot/term-0c/cgroup.procs" ]]; then
         return 0
     fi
 
@@ -57,12 +57,9 @@ function attach_shell_to_unique_cgroup {
         return 0
     fi
 
-    # If the last_suffix is blank e.g. missing cgroups, do nothing.
+    # Get the last letter suffix {a..z} of the pool capacity.
     export last_suffix=$(ls -1d "$cgroot/term-0"* 2>/dev/null | tail -1)
     last_suffix="${last_suffix: -1}"
-    if [[ -z "$last_suffix" ]]; then
-        return 0
-    fi
 
     # Select base cgroup from the last char of the shell PID value.
     export cgname="term-${$: -1}"
@@ -108,8 +105,8 @@ function attach_shell_to_unique_cgroup {
 
         # search for untaken cgroup
         for letter in {a..z}; do
-            [[ ! -d "$cgname${letter}" ]] && break
-            read -r line < "$cgname${letter}/cgroup.procs"
+            [[ ! -d "${cgname}${letter}" ]] && break
+            read -r line < "${cgname}${letter}/cgroup.procs"
             if [[ -z "$line" ]]; then
                 # move the shell PID into empty cgroup
                 echo $shell_pid > "${cgname}${letter}/cgroup.procs"
@@ -118,7 +115,7 @@ function attach_shell_to_unique_cgroup {
         done
 
         # move the shell PID into base cgroup
-        echo $shell_pid > "$cgname/cgroup.procs"
+        echo $shell_pid > "${cgname}/cgroup.procs"
     '
 
     unset cgname last_suffix shell_pid
