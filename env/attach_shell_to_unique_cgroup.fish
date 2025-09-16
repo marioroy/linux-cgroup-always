@@ -45,7 +45,7 @@ function attach_shell_to_unique_cgroup
     end
 
     # If the term-0/cgroup.procs file is missing, do nothing.
-    # Possibly /etc/cgconfig.conf lacking pre-defined entries or
+    # Possibly /etc/cgconfig.conf pre-defined entries missing or
     # running cgroup v1.
     set --local cgroot "/sys/fs/cgroup/user.slice/user-$UID.slice"
     if not test -e "$cgroot/term-0/cgroup.procs"
