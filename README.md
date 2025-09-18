@@ -217,6 +217,14 @@ systemctl --user daemon-reload
 systemctl --user restart gnome-terminal-server.service
 ```
 
+## Acknowledgement
+
+Thank you, to the CachyOS community with sounding board and testing.
+
+- ms178
+- nutcase
+- phusho
+
 ## LICENSE 
 
 ```text
