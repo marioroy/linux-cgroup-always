@@ -22,7 +22,7 @@ function attach_shell_to_unique_cgroup
         return 0
     end
 
-    # If the parent command is not in the list, do nothing.
+    # If the parent terminal command is not in the list, do nothing.
     # Ghostty provides support with the "linux-cgroup = always" option.
     # Refer to readme for GNOME Terminal. Other terminal applications
     # can be supported, by adding /proc/$PPID/comm result to the list.

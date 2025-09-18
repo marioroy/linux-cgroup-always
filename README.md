@@ -1,15 +1,23 @@
 # Linux Cgroup Always
 
-Ghostty-like `linux-cgroup = always` feature from a pre-defined pool of
-cgroup names. The benefit is overall improved desktop interactivity by
-preventing resource hogging, enhancing isolation, and ensuring fair
+Ghostty-like `linux-cgroup = always` feature via systemd-run or pre-defined
+pool of cgroup names. The benefit is overall improved desktop interactivity
+by preventing resource hogging, enhancing isolation, and ensuring fair
 resource distribution.
 
 This works with { `alacritty`, `kitty`, `konsole`, `qterminal`, `tmux: server` }
 and interactive shells { `bash`, `fish`, `zsh` }. Refer to the end of the readme
 for Ghostty and GNOME Terminal setup.
 
-## Requirements
+## Systemd-run or Pool
+
+Choose between two approaches. Cgroup via transient systemd scope unit
+or pre-defined pool of cgroup names. If former, source the `env-systemd`
+file. No further steps needed.
+
+Continue reading for the pool approach.
+
+## Pool Requirements
 
 The intended use-case is your personal Linux machine or workstation,
 have `libcgroup` package installed, and `cgconfig.service` enabled.

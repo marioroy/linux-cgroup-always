@@ -20,10 +20,12 @@ if [ $(stat -fc %T /sys/fs/cgroup/) = "tmpfs" ]; then
     # If the output is tmpfs, the system is using cgroup v1
     # If the output is cgroup2fs, the system is using cgroup v2
     echo "This requires cgroup v2. Refer to OS guide for defaulting to v2."
+    echo "You may need to configure 'cgroup_no_v1=all' kernel boot parameter."
     exit 2
 elif [ ! -e "/sys/fs/cgroup/cgroup.controllers" ]; then
     # If the file is not found, the system is likely using cgroup v1
     echo "This requires cgroup v2. Refer to OS guide for defaulting to v2."
+    echo "You may need to configure 'cgroup_no_v1=all' kernel boot parameter."
     exit 2
 fi
 
