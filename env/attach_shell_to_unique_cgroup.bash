@@ -49,14 +49,6 @@ function attach_shell_to_unique_cgroup {
         return 0
     fi
 
-    # Get the last letter suffix {a..z} of the pool capacity.
-    export last_suffix=$(ls -1d "$cgroot/term-0"* 2>/dev/null)
-    last_suffix="${last_suffix: -1}"  # last char of string
-
-    # Select base cgroup from the last char of the shell PID value.
-    export cgname="term-${$: -1}"
-    export shell_pid="$$"
-
     # If the cgroup.procs file cannot be opened for writing, do nothing.
     # To move a process from cgroup A to cgroup B, the user attempting
     # the move must have write permissions to the common ancestor of
@@ -64,6 +56,16 @@ function attach_shell_to_unique_cgroup {
     bash -c '
         cd "/sys/fs/cgroup/user.slice/user-$UID.slice"
         exec {lock_fd}>>cgroup.procs || exit 0
+
+        # get the last letter suffix {a..z} of the pool capacity
+        last_suffix=$(\ls -1d term-0*)
+        last_suffix="${last_suffix: -1}"  # last char of string
+
+        # select base cgroup from the last char of the PPID value
+        cgname="term-${PPID: -1}"
+        shell_pid="$PPID"
+
+        # obtain an exclusive lock
         flock -x $lock_fd
 
         # select another base cgroup if the last suffix is taken
@@ -115,8 +117,6 @@ function attach_shell_to_unique_cgroup {
         echo $shell_pid > "${cgname}/cgroup.procs"
         exec {lock_fd}>&-
     ' 2> /dev/null
-
-    unset cgname last_suffix shell_pid
 }
 
 attach_shell_to_unique_cgroup
