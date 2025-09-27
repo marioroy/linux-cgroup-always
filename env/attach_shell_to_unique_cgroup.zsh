@@ -49,35 +49,30 @@ function attach_shell_to_unique_cgroup {
         return 0
     fi
 
-    # If the UID of the cgroup.procs file is not $UID, do nothing.
-    # To move a process from cgroup A to cgroup B, the user attempting
-    # the move must have write permissions to the common ancestor of
-    # both A and B.
-    if [[ $(stat -c '%u' "$cgroot/cgroup.procs") != "$UID" ]]; then
-        return 0
-    fi
-
     # Get the last letter suffix {a..z} of the pool capacity.
-    export last_suffix=$(ls -1d "$cgroot/term-0"* 2>/dev/null | tail -1)
-    last_suffix="${last_suffix: -1}"
+    export last_suffix=$(ls -1d "$cgroot/term-0"* 2>/dev/null)
+    last_suffix="${last_suffix: -1}"  # last char of string
 
     # Select base cgroup from the last char of the shell PID value.
     export cgname="term-${$: -1}"
-    local lockfile="$cgroot/cgroup.procs"
     export shell_pid="$$"
 
-    flock -e -w 2 --fcntl "$lockfile" bash -c '
+    # If the cgroup.procs file cannot be opened for writing, do nothing.
+    # To move a process from cgroup A to cgroup B, the user attempting
+    # the move must have write permissions to the common ancestor of
+    # both A and B.
+    bash -c '
         cd "/sys/fs/cgroup/user.slice/user-$UID.slice"
-        read -r line < "${cgname}${last_suffix}/cgroup.procs"
-        cgname2=""
+        exec {lock_fd}>>cgroup.procs || exit 0
+        flock -x $lock_fd
 
         # select another base cgroup if the last suffix is taken
+        read -r line < "${cgname}${last_suffix}/cgroup.procs"
         if [[ -n "$line" ]]; then
             # quick scan
+            cgname2=""
             for i in {0..9}; do
-                # assume the path exists
-                { read -r line < "term-${i}${last_suffix}/cgroup.procs"
-                } 2>/dev/null
+                read -r line < "term-${i}${last_suffix}/cgroup.procs"
                 if [[ -z "$line" ]]; then
                     # found base cgroup
                     cgname2="term-$i"
@@ -96,6 +91,7 @@ function attach_shell_to_unique_cgroup {
                         if [[ -z "$line" ]]; then
                             # found empty cgroup
                             echo $shell_pid > "term-${i}${letter}/cgroup.procs"
+                            exec {lock_fd}>&-
                             exit 0
                         fi
                     done
@@ -110,13 +106,15 @@ function attach_shell_to_unique_cgroup {
             if [[ -z "$line" ]]; then
                 # move the shell PID into empty cgroup
                 echo $shell_pid > "${cgname}${letter}/cgroup.procs"
+                exec {lock_fd}>&-
                 exit 0
             fi
         done
 
-        # move the shell PID into base cgroup
+        # all taken, move the shell PID into base cgroup
         echo $shell_pid > "${cgname}/cgroup.procs"
-    '
+        exec {lock_fd}>&-
+    ' 2> /dev/null
 
     unset cgname last_suffix shell_pid
 }
