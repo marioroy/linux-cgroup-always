@@ -59,10 +59,11 @@ function attach_shell_to_unique_cgroup
     bash -c '
         cd "/sys/fs/cgroup/user.slice/user-$UID.slice"
         exec {lock_fd}>>cgroup.procs || exit 0
+        trap "exec {lock_fd}>&-" EXIT # close lock handle
 
         # get the last letter suffix {a..z} of the pool capacity
         last_suffix=$(\ls -1d term-0*)
-        last_suffix="${last_suffix: -1}"  # last char of string
+        last_suffix="${last_suffix: -1}" # last char of string
 
         # select base cgroup from the last char of the PPID value
         cgname="term-${PPID: -1}"
@@ -96,7 +97,6 @@ function attach_shell_to_unique_cgroup
                         if [[ -z "$line" ]]; then
                             # found empty cgroup
                             echo $shell_pid > "term-${i}${letter}/cgroup.procs"
-                            exec {lock_fd}>&-
                             exit 0
                         fi
                     done
@@ -111,14 +111,12 @@ function attach_shell_to_unique_cgroup
             if [[ -z "$line" ]]; then
                 # move the shell PID into empty cgroup
                 echo $shell_pid > "${cgname}${letter}/cgroup.procs"
-                exec {lock_fd}>&-
                 exit 0
             fi
         done
 
         # all taken, move the shell PID into base cgroup
         echo $shell_pid > "${cgname}/cgroup.procs"
-        exec {lock_fd}>&-
     ' 2> /dev/null
 end
 
