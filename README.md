@@ -134,7 +134,7 @@ $ cgterm_attach
 user.slice/user-ID.slice/term-8c
 ```
 
-Two helper functions are provided to display the pool usage.
+The pool usage can be displayed with two helper functions.
 
 ```bash
 $ cgterm_taken
