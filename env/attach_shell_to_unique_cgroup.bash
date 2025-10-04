@@ -120,16 +120,46 @@ function attach_shell_to_unique_cgroup {
 attach_shell_to_unique_cgroup
 
 function cgterm_attach {
-    # Display the shell cgroup.
-    # If base cgroup, try attaching the shell to unique cgroup.
+    # Attach and display the shell cgroup.
     local match="/user.slice/user-$UID.slice/term-"
+    local cgroot="/sys/fs/cgroup/user.slice/user-$UID.slice"
     local cgroup=""
     read -r cgroup < "/proc/self/cgroup"
-    if [[ "$cgroup" = *"$match"[0-9][a-z] ]]; then
-        echo "$cgroup"
-    else
-        attach_shell_to_unique_cgroup
+    if [ -n "$1" ]; then
+        # Join the base cgroup, error if not [0-9].
+        if [[ "$1" = [0-9] ]]; then
+            if [[ -z "$OLDCGROUP" && "$cgroup" != *"$match"* ]]; then
+                export OLDCGROUP="$cgroup"
+                OLDCGROUP_PID=$(bash -c '
+                    # prevent the old cgroup from being removed
+                    nohup sleep infinity &>/dev/null &
+                    echo $!
+                ')
+                trap '[ -n "$OLDCGROUP_PID" ] && kill $OLDCGROUP_PID' EXIT
+            fi
+            echo "$$" > "$cgroot/term-$1/cgroup.procs"
+            cat /proc/self/cgroup
+        else
+            echo "invalid argument"
+        fi
+    elif [ -n "$OLDCGROUP_PID" ]; then
+        # Handle unsupported terminal emulators.
+        local cpath=${OLDCGROUP#*::/}
+
+        echo "$$" > "/sys/fs/cgroup/$cpath/cgroup.procs"
+        kill $OLDCGROUP_PID 2>/dev/null
+        unset OLDCGROUP_PID OLDCGROUP
+        trap - EXIT
+
         cat /proc/self/cgroup
+    else
+        # If base cgroup, attach the shell to unique cgroup.
+        if [[ "$cgroup" = *"$match"[0-9][a-z] ]]; then
+            echo "$cgroup"
+        else
+            attach_shell_to_unique_cgroup
+            cat /proc/self/cgroup
+        fi
     fi
 }
 

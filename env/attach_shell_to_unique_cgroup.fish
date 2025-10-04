@@ -123,16 +123,52 @@ end
 attach_shell_to_unique_cgroup
 
 function cgterm_attach
-    # Display the shell cgroup.
-    # If base cgroup, try attaching the shell to unique cgroup.
+    # Attach and display the shell cgroup.
     set --local UID (id -u)
     set --local match "/user.slice/user-$UID.slice/term-"
+    set --local cgroot "/sys/fs/cgroup/user.slice/user-$UID.slice"
+    set --local arg $argv[1]
     read -l cgroup < "/proc/self/cgroup"
-    if string match --quiet --regex "$match\d[a-z]\Z" "$cgroup"
-        echo "$cgroup"
-    else
-        attach_shell_to_unique_cgroup
+    if test -n "$arg"
+        # Join the base cgroup, error if not [0-9].
+        if string match --quiet --regex "\A\d\Z" "$arg"
+            if test -z "$OLDCGROUP"
+                    and not string match --quiet --regex "$match" "$cgroup"
+                set -gx OLDCGROUP "$cgroup"
+                set -g  OLDCGROUP_PID (bash -c '
+                    # prevent the old cgroup from being removed
+                    nohup sleep infinity &>/dev/null &
+                    echo $!
+                ')
+                trap '
+                    if test -n "$OLDCGROUP_PID"
+                        kill $OLDCGROUP_PID
+                    end
+                ' EXIT
+            end
+            echo "$fish_pid" > "$cgroot/term-$arg/cgroup.procs"
+            cat "/proc/self/cgroup"
+        else
+            echo "invalid argument"
+        end
+    else if test -n "$OLDCGROUP_PID"
+        # Handle unsupported terminal emulators.
+        set --local cpath (string replace -r '^.*::/' '' $OLDCGROUP)
+
+        echo "$fish_pid" > "/sys/fs/cgroup/$cpath/cgroup.procs"
+        kill $OLDCGROUP_PID 2>/dev/null
+        set -e OLDCGROUP_PID OLDCGROUP
+        trap - EXIT
+
         cat "/proc/self/cgroup"
+    else
+        # If base cgroup, attach the shell to unique cgroup.
+        if string match --quiet --regex "$match\d[a-z]\Z" "$cgroup"
+            echo "$cgroup"
+        else
+            attach_shell_to_unique_cgroup
+            cat "/proc/self/cgroup"
+        end
     end
 end
 

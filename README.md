@@ -11,9 +11,9 @@ for Ghostty and GNOME Terminal setup.
 
 ## Systemd-run or Pool
 
-Choose between two approaches. Cgroup via transient systemd scope unit
-or pre-defined pool of cgroup names. If former, source the `env-systemd`
-file. No further steps needed.
+Choose between two approaches. (1) Cgroup via a transient systemd scope unit or
+(2) pre-defined pool of task groups with niceness support. If former, source the
+`env-systemd` file. No further steps needed.
 
 Continue reading for the pool approach.
 
@@ -69,7 +69,7 @@ Created symlink '/etc/systemd/system/sysinit.target.wants/set-owner...
 Please reboot the machine for the changes to take effect
 ```
 
-**Shell Activation**
+## Shell Activation
 
 Preferably, source the environment file near the top of your shell
 startup script for early activation.
@@ -89,20 +89,38 @@ Or copy the `attach_shell_to_unique_cgroup` env file to your shell
 function folder. Call the `attach_shell_to_unique_cgroup` function
 near the top of your shell startup script.
 
-**Verification**
+## Verification
 
 Launch the terminal application and check the cgroup membership.
 The base name `term-{0..9}` is derived from the last character
 of the shell PID value. The next empty cgroup is selected, suffix
-`{a..k}` unless exhausted (no suffix). 
+`{a..d}` unless exhausted (no suffix). 
 
 ```bash
 $ cat /proc/self/cgroup 
 ------------------------------------
-0::/user.slice/user-ID.slice/term-3e
+0::/user.slice/user-ID.slice/term-3d
 ```
 
-The cgroup basename is term-{0..9} without a suffix {a..k} after reaching
+The `systemd-cgtop` command can be used to monitor resource usage.
+
+```bash
+$ systemd-cgtop
+----------------------------------------------------------------------
+CGroup                            Tasks   %CPU Memory Input/s Output/s
+/                                   986 1600.9     5G       -        -
+user.slice                          470 1599.8     2G       -        -
+user.slice/user-1000.slice          470 1599.8   1.9G       -        -
+user.slice/user-1000.slice/term-3d   18  799.8 158.5M       -        -
+user.slice/user-1000.slice/term-6a   10  798.5 140.3M       -        -
+user.slice/user-1000.slice/term-8c    2    0.8   3.8M       -        -
+user.slice/user-.../session-2.scope 306    0.2   1.1G       -        -
+system.slice                         66    0.1 444.9M       -        -
+```
+
+## Helper Functions 
+
+The cgroup basename is term-{0..9} without a suffix {a..d} after reaching
 pool capacity. Once resources have been freed, a helper function can be
 called to move the shell process to a unique cgroup. (optional)
 
@@ -116,12 +134,12 @@ $ cgterm_attach
 user.slice/user-ID.slice/term-8c
 ```
 
-Helper functions can be used to display the usage.
+Two helper functions are provided to display the pool usage.
 
 ```bash
 $ cgterm_taken
 ------------------------------------
-user.slice/user-ID.slice/term-3e
+user.slice/user-ID.slice/term-3d
 user.slice/user-ID.slice/term-6a
 user.slice/user-ID.slice/term-8c
 
@@ -130,23 +148,44 @@ $ cgterm_free | wc -l
 47
 ```
 
-The `systemd-cgtop` command can be used to monitor resource usage.
+A process/thread's nice value has an effect for scheduling decisions only
+relative to other process/threads in the same task group. For nice support
+across multiple terminal windows or panes, call helper function with `[0-9]`
+to attach multiple emulators to the same base cgroup.
 
 ```bash
-$ systemd-cgtop
-----------------------------------------------------------------------
-CGroup                            Tasks   %CPU Memory Input/s Output/s
-/                                   986 1600.9     5G       -        -
-user.slice                          470 1599.8     2G       -        -
-user.slice/user-1000.slice          470 1599.8   1.9G       -        -
-user.slice/user-1000.slice/term-3e   18  799.8 158.5M       -        -
-user.slice/user-1000.slice/term-6a   10  798.5 140.3M       -        -
-user.slice/user-1000.slice/term-8c    2    0.8   3.8M       -        -
-user.slice/user-.../session-2.scope 306    0.2   1.1G       -        -
-system.slice                         66    0.1 444.9M       -        -
+# terminal one
+$ cgterm_attach 1
+0::/user.slice/user-1000.slice/term-1
+$ nice -n 0 primesieve 1e12
+Seconds: 6.144
+
+# terminal two
+$ cgterm_attach 1
+0::/user.slice/user-1000.slice/term-1
+$ nice -n 9 primesieve 1e12
+Seconds: 10.478
 ```
 
-**Uninstall**
+Omitting the argument restores back to a unique cgroup, if available, or in
+the case of unsupported terminal emulator, the originating cgroup. The Linux
+kernel scheduler equalizes the distribution of CPU cycles across task groups.
+
+```bash
+# terminal one
+$ cgterm_attach
+0::/user.slice/user-1000.slice/term-3d
+$ nice -n 0 primesieve 1e12
+Seconds: 10.434
+
+# terminal two
+$ cgterm_attach
+0::/user.slice/user-1000.slice/term-8c
+$ nice -n 9 primesieve 1e12
+Seconds: 10.510
+```
+
+## Uninstall
 
 Run the uninstall script to undo the system-level changes. Separately,
 remove the entry from your shell's function folder or startup script.
