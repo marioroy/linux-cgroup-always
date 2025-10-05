@@ -27,13 +27,13 @@ function attach_shell_to_unique_cgroup {
 
 function cgterm_attach {
     # Attach and display the shell cgroup.
-    local cgroot="/sys/fs/cgroup/user.slice/user-$UID.slice"
     local cgroup=""
     read -r cgroup < "/proc/self/cgroup"
 
     if [ -n "$1" ]; then
         # attach to a base cgroup, error if not [0-9]
         if [[ "$1" = [0-9] ]]; then
+            local cgroot="/sys/fs/cgroup/user.slice/user-$UID.slice"
             if [[ -z "$OLDCGROUP" ]]; then
                 export OLDCGROUP="$cgroup"
                 OLDCGROUP_PID=$(bash -c '
@@ -47,21 +47,28 @@ function cgterm_attach {
             cat /proc/self/cgroup
         else
             echo "invalid argument"
+            return 1
         fi
-    elif [ -n "$OLDCGROUP_PID" ]; then
-        # attach to the originating cgroup
+    else
+        # do nothing
+        echo "$cgroup"
+    fi
+}
+
+function cgterm_detach {
+    # Detach and display the shell cgroup.
+    if [ -n "$OLDCGROUP_PID" ]; then
+        # revert back to the originating cgroup
         local cpath=${OLDCGROUP#*::/}
 
         echo "$$" > "/sys/fs/cgroup/$cpath/cgroup.procs"
         kill $OLDCGROUP_PID 2>/dev/null
         unset OLDCGROUP_PID OLDCGROUP
-        trap - EXIT
 
-        cat /proc/self/cgroup
-    else
-        # do nothing
-        echo "$cgroup"
+        trap - EXIT
     fi
+
+    cat /proc/self/cgroup
 }
 
 function cgterm_nice {

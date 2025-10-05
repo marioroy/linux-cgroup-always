@@ -123,19 +123,18 @@ $ nice -n 9 primesieve 1e12
 Seconds: 10.478
 ```
 
-Omitting the argument reverts back to the originating cgroup. The result
-is the Linux kernel scheduler equalizes the distribution of CPU cycles
-across the task groups.
+Detach reverts back to the originating cgroup. The result is the Linux kernel
+scheduler equalizes the distribution of CPU cycles across the task groups.
 
 ```bash
 # terminal one
-$ cgterm_attach
+$ cgterm_detach
 0::/user.slice/.../user@1000.service/app.slice/shell-3608.scope
 $ nice -n 0 primesieve 1e12
 Seconds: 10.434
 
 # terminal two
-$ cgterm_attach
+$ cgterm_detach
 0::/user.slice/.../user@1000.service/app.slice/shell-2715.scope
 $ nice -n 9 primesieve 1e12
 Seconds: 10.510

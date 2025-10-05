@@ -32,14 +32,14 @@ end
 
 function cgterm_attach
     # Attach and display the shell cgroup.
-    set --local UID (id -u)
-    set --local cgroot "/sys/fs/cgroup/user.slice/user-$UID.slice"
     set --local arg $argv[1]
     read -l cgroup < "/proc/self/cgroup"
 
     if test -n "$arg"
         # attach to a base cgroup, error if not [0-9]
         if string match --quiet --regex "\A\d\Z" "$arg"
+            set --local UID (id -u)
+            set --local cgroot "/sys/fs/cgroup/user.slice/user-$UID.slice"
             if test -z "$OLDCGROUP"
                 set -gx OLDCGROUP "$cgroup"
                 set -g  OLDCGROUP_PID (bash -c '
@@ -57,21 +57,28 @@ function cgterm_attach
             cat "/proc/self/cgroup"
         else
             echo "invalid argument"
+            return 1
         end
-    else if test -n "$OLDCGROUP_PID"
-        # attach to the originating cgroup
+    else
+        # do nothing
+        echo "$cgroup"
+    end
+end
+
+function cgterm_detach
+    # Detach and display the shell cgroup.
+    if test -n "$OLDCGROUP_PID"
+        # revert back to the originating cgroup
         set --local cpath (string replace -r '^.*::/' '' $OLDCGROUP)
 
         echo "$fish_pid" > "/sys/fs/cgroup/$cpath/cgroup.procs"
         kill $OLDCGROUP_PID 2>/dev/null
         set -e OLDCGROUP_PID OLDCGROUP
-        trap - EXIT
 
-        cat "/proc/self/cgroup"
-    else
-        # do nothing
-        echo "$cgroup"
+        trap - EXIT
     end
+
+    cat "/proc/self/cgroup"
 end
 
 function cgterm_nice
