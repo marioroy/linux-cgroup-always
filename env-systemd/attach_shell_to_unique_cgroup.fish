@@ -47,5 +47,34 @@ function cgterm_nice
     end
 end
 
+function cgterm_quota
+    # Get or set the cgroup quota percent [10-100].
+    read -l cgroup < "/proc/self/cgroup"
+    set --local cpath (string replace -r '^.*::/' '' $cgroup)
+    set --local arg $argv[1]
+
+    read -l cpuline < "/sys/fs/cgroup/$cpath/cpu.max"
+    set cpuline (string split ' ' -- $cpuline)
+    set --local max $cpuline[1]
+    set --local period $cpuline[2]
+    set --local nproc (nproc)
+
+    if test "$max" = "max"
+        set max (math "$nproc * $period")
+    end
+
+    if test -z "$arg"
+        echo (math "$max * 100 / $nproc / $period")
+    else if string match --quiet --regex "\A[0-9]+\Z" "$arg"
+            and test "$arg" -ge 10
+            and test "$arg" -le 100
+        set max (math "$nproc * $period * $arg / 100")
+        echo "$max $period" > "/sys/fs/cgroup/$cpath/cpu.max"
+    else
+        echo "invalid argument"
+        return 1
+    end
+end
+
 attach_shell_to_unique_cgroup
 

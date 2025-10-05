@@ -41,5 +41,32 @@ function cgterm_nice {
     fi
 }
 
+function cgterm_quota {
+    # Get or set the cgroup quota percent [10-100].
+    local cgroup cpath cpuline max period
+    local nproc=$(nproc)
+
+    read -r cgroup < "/proc/self/cgroup"
+    cpath=${cgroup#*::/}
+
+    read -r cpuline < "/sys/fs/cgroup/$cpath/cpu.max"
+    max=${cpuline% *}
+    period=${cpuline#* }
+
+    if [ "$max" = "max" ]; then
+        max=$((nproc * period))
+    fi
+
+    if [ -z "$1" ]; then
+        echo $((max * 100 / nproc / period))
+    elif [[ "$1" =~ ^[0-9]+$ ]] && (($1 >= 10 && $1 <= 100)); then
+        max=$((nproc * period * $1 / 100))
+        echo "$max $period" > "/sys/fs/cgroup/$cpath/cpu.max"
+    else
+        echo "invalid argument"
+        return 1
+    fi
+}
+
 attach_shell_to_unique_cgroup
 
