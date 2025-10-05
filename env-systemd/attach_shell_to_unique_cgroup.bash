@@ -26,7 +26,7 @@ function attach_shell_to_unique_cgroup {
 }
 
 function cgterm_nice {
-    # Get or set the cgroup nice value.
+    # Get or set the cgroup nice value [0-19].
     local cgroup cpath
     read -r cgroup < "/proc/self/cgroup"
     cpath=${cgroup#*::/}

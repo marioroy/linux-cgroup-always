@@ -31,7 +31,7 @@ function attach_shell_to_unique_cgroup
 end
 
 function cgterm_nice
-    # Get or set the cgroup nice value.
+    # Get or set the cgroup nice value [0-19].
     read -l cgroup < "/proc/self/cgroup"
     set --local cpath (string replace -r '^.*::/' '' $cgroup)
     set --local arg $argv[1]
