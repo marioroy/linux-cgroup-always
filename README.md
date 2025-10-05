@@ -1,32 +1,18 @@
 # Linux Cgroup Always
 
-Ghostty-like `linux-cgroup = always` feature via systemd-run or pre-defined
-pool of cgroup names. The benefit is overall improved desktop interactivity
-by preventing resource hogging, enhancing isolation, and ensuring fair
-resource distribution.
+Ghostty-like `linux-cgroup = always` feature via systemd-run. The benefit
+is overall improved desktop interactivity by preventing resource hogging,
+enhancing isolation, and ensuring fair resource distribution.
 
 This works with { `alacritty`, `kitty`, `konsole`, `qterminal`, `tmux: server` }
 and interactive shells { `bash`, `fish`, `zsh` }. Refer to the end of the readme
 for Ghostty and GNOME Terminal setup.
 
-## Systemd-run or Pool
+## Pool Requirements for Niceness Support
 
-Choose between two approaches.
-
-- Cgroup via a transient systemd scope unit
-
-Source the `env-systemd` file. Includes helper functions `cgterm_nice` to
-get/set the cgroup niceness value `[0..19]` and `cgterm_quota` to get/set
-the max CPU quota percentage `[10..100]`. No further steps needed.
-
-- Pre-defined pool of task groups with niceness support
-
-Continue reading for the pool approach.
-
-## Pool Requirements
-
-The intended use-case is your personal Linux machine or workstation,
-have `libcgroup` package installed, and `cgconfig.service` enabled.
+Niceness support refers to calling the nice command across multiple terminal
+windows or panes, made possible by attaching to the same cgroup. This requires
+the `libcgroup` package and have the `cgconfig.service` enabled.
 
 Steps for Arch-based distributions:
 
@@ -46,15 +32,10 @@ sudo systemctl enable --now cgconfig.service
 
 **Installation**
 
-The minimum and maximum pool capacity are 30 and 260, respectively.
-This adds 50 cgroup entries (10 + 40) to `/etc/cgconfig.conf`. The pool
-consists of ten basenames ending in `{0..9}` and four suffixes `{a..d}`
-per basename.
-
-Want to change capacity later? Run installer again with desired capacity.
+The installer adds 10 entries to `/etc/cgconfig.conf`, ending in `{0..9}`.
 
 ```text
-$ ./cgconfig.install [capacity] (default 40)
+$ ./cgconfig.install
 
 Adding pool of cgroup entries to /etc/cgconfig.conf
 group user.slice/user-ID.slice/term-0 {
@@ -82,13 +63,13 @@ startup script for early activation.
 
 ```bash
 # ~/.bashrc
-source /path/to/env/attach_shell_to_unique_cgroup.bash
+source /path/to/env-systemd/attach_shell_to_unique_cgroup.bash
 
 # ~/.config/fish/config.fish
-source /path/to/env/attach_shell_to_unique_cgroup.fish
+source /path/to/env-systemd/attach_shell_to_unique_cgroup.fish
 
 # ~/.zshrc
-source /path/to/env/attach_shell_to_unique_cgroup.zsh
+source /path/to/env-systemd/attach_shell_to_unique_cgroup.zsh
 ```
 
 Or copy the `attach_shell_to_unique_cgroup` env file to your shell
@@ -98,17 +79,16 @@ near the top of your shell startup script.
 ## Verification
 
 Launch the terminal application and check the cgroup membership.
-The base name `term-{0..9}` is derived from the last character
-of the shell PID value. The next empty cgroup is selected, suffix
-`{a..d}` unless exhausted (no suffix). 
 
 ```bash
 $ cat /proc/self/cgroup 
-------------------------------------
-0::/user.slice/user-ID.slice/term-3d
+---------------------------------------------------------------
+0::/user.slice/.../user@1000.service/app.slice/shell-3608.scope
 ```
 
 The `systemd-cgtop` command can be used to monitor resource usage.
+Being deeply nested, `cgtop` shows one service entry where the
+`app.slice` task groups reside.
 
 ```bash
 $ systemd-cgtop
@@ -117,42 +97,12 @@ CGroup                            Tasks   %CPU Memory Input/s Output/s
 /                                   986 1600.9     5G       -        -
 user.slice                          470 1599.8     2G       -        -
 user.slice/user-1000.slice          470 1599.8   1.9G       -        -
-user.slice/user-1000.slice/term-3d   18  799.8 158.5M       -        -
-user.slice/user-1000.slice/term-6a   10  798.5 140.3M       -        -
-user.slice/user-1000.slice/term-8c    2    0.8   3.8M       -        -
-user.slice/user-.../session-2.scope 306    0.2   1.1G       -        -
+user.slice/.../user@1000.service    155 1598.1 580.7M       -        -
+user.slice/.../session-2.scope      306    0.2   1.1G       -        -
 system.slice                         66    0.1 444.9M       -        -
 ```
 
 ## Helper Functions 
-
-The cgroup basename is term-{0..9} without a suffix {a..d} after reaching
-pool capacity. Once resources have been freed, a helper function can be
-called to move the shell process to a unique cgroup. (optional)
-
-```bash
-$ cat /proc/self/cgroup 
-------------------------------------
-0::/user.slice/user-ID.slice/term-4
-
-$ cgterm_attach
-------------------------------------
-user.slice/user-ID.slice/term-8c
-```
-
-The pool usage can be displayed with two helper functions.
-
-```bash
-$ cgterm_taken
-------------------------------------
-user.slice/user-ID.slice/term-3d
-user.slice/user-ID.slice/term-6a
-user.slice/user-ID.slice/term-8c
-
-$ cgterm_free | wc -l
-------------------------------------
-47
-```
 
 A process/thread's nice value has an effect for scheduling decisions only
 relative to other process/threads in the same task group. For nice support
@@ -173,22 +123,66 @@ $ nice -n 9 primesieve 1e12
 Seconds: 10.478
 ```
 
-Omitting the argument restores back to a unique cgroup, if available, or in
-the case of unsupported terminal emulator, the originating cgroup. The Linux
-kernel scheduler equalizes the distribution of CPU cycles across task groups.
+Omitting the argument reverts back to the originating cgroup. The result
+is the Linux kernel scheduler equalizes the distribution of CPU cycles
+across the task groups.
 
 ```bash
 # terminal one
 $ cgterm_attach
-0::/user.slice/user-1000.slice/term-3d
+0::/user.slice/.../user@1000.service/app.slice/shell-3608.scope
 $ nice -n 0 primesieve 1e12
 Seconds: 10.434
 
 # terminal two
 $ cgterm_attach
-0::/user.slice/user-1000.slice/term-8c
+0::/user.slice/.../user@1000.service/app.slice/shell-2715.scope
 $ nice -n 9 primesieve 1e12
 Seconds: 10.510
+```
+
+The `cgterm-nice [0-19]` function can be used to get/set the cgroup nice
+value. Applying a change to a base cgroup will emit an error.
+
+```bash
+# terminal one
+$ cat /proc/self/cgroup
+0::/user.slice/.../user@1000.service/app.slice/shell-3608.scope
+$ cgterm_nice 0 (default)
+$ primesieve 1e12
+Seconds: 6.039
+
+# terminal two
+$ cat /proc/self/cgroup
+0::/user.slice/.../user@1000.service/app.slice/shell-2715.scope
+$ cgterm_nice 9
+$ primesieve 1e12
+Seconds: 10.437
+```
+
+Alternately, the `cgterm-quota [10-100]` function can be used to get/set
+the max CPU quota percent. Likewise, applying a change to a base cgroup
+emits an error.
+
+```bash
+$ cat /proc/self/cgroup
+0::/user.slice/.../user@1000.service/app.slice/shell-3608.scope
+
+$ cgterm_quota
+100
+
+$ primesieve 1e12
+Seconds: 5.224
+
+$ cgterm_quota 50
+$ primesieve 1e12
+Seconds: 10.543
+
+$ cgterm_attach 2
+0::/user.slice/user-1000.slice/term-1
+
+$ cgterm_quota 70
+cannot apply quota to base cgroup
 ```
 
 ## Uninstall
