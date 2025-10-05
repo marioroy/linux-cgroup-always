@@ -17,7 +17,7 @@ Choose between two approaches.
 
 Source the `env-systemd` file. Includes helper functions `cgterm_nice` to
 get/set the cgroup niceness value `[0..19]` and `cgterm_quota` to get/set
-the CPU quota percentage `[10..100]`. No further steps needed.
+the max CPU quota percentage `[10..100]`. No further steps needed.
 
 - Pre-defined pool of task groups with niceness support
 
