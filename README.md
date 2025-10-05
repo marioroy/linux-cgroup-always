@@ -16,7 +16,7 @@ Choose between two approaches.
 - Cgroup via a transient systemd scope unit
 
 Source the `env-systemd` file. Includes helper function `cgterm_nice` to get
-or set the shell niceness value `[0..19]`. No further steps needed.
+or set the cgroup niceness value `[0..19]`. No further steps needed.
 
 - Pre-defined pool of task groups with niceness support
 
