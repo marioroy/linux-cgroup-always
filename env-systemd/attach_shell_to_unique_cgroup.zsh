@@ -25,5 +25,22 @@ function attach_shell_to_unique_cgroup {
          -p CPUAccounting=yes -p CPUQuota=$(nproc)00% -- "$ZSH_NAME"
 }
 
+function cgterm_nice {
+    # Get or set the cgroup nice level.
+    local cgroup cpath
+    read -r cgroup < "/proc/self/cgroup"
+    cpath=${cgroup#*::/}
+    if [ -z "$1" ]; then
+        cat "/sys/fs/cgroup/$cpath/cpu.weight.nice"
+    else
+        if [[ "$1" =~ ^[0-9]+$ ]] && (($1 <= 19)); then
+            echo "$1" > "/sys/fs/cgroup/$cpath/cpu.weight.nice"
+        else
+            echo "invalid argument"
+            return 1
+        fi
+    fi
+}
+
 attach_shell_to_unique_cgroup
 

@@ -11,9 +11,14 @@ for Ghostty and GNOME Terminal setup.
 
 ## Systemd-run or Pool
 
-Choose between two approaches. (1) Cgroup via a transient systemd scope unit or
-(2) pre-defined pool of task groups with niceness support. If former, source the
-`env-systemd` file. No further steps needed.
+Choose between two approaches.
+
+- Cgroup via a transient systemd scope unit
+
+Source the `env-systemd` file. Includes helper function `cgterm_nice` to get
+or set the shell niceness value `[0..19]`. No further steps needed.
+
+- Pre-defined pool of task groups with niceness support
 
 Continue reading for the pool approach.
 
