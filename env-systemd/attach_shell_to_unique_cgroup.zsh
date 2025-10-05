@@ -26,19 +26,18 @@ function attach_shell_to_unique_cgroup {
 }
 
 function cgterm_nice {
-    # Get or set the cgroup nice level.
+    # Get or set the cgroup nice value.
     local cgroup cpath
     read -r cgroup < "/proc/self/cgroup"
     cpath=${cgroup#*::/}
+
     if [ -z "$1" ]; then
         cat "/sys/fs/cgroup/$cpath/cpu.weight.nice"
+    elif [[ "$1" =~ ^[0-9]+$ ]] && (($1 <= 19)); then
+        echo "$1" > "/sys/fs/cgroup/$cpath/cpu.weight.nice"
     else
-        if [[ "$1" =~ ^[0-9]+$ ]] && (($1 <= 19)); then
-            echo "$1" > "/sys/fs/cgroup/$cpath/cpu.weight.nice"
-        else
-            echo "invalid argument"
-            return 1
-        fi
+        echo "invalid argument"
+        return 1
     fi
 }
 

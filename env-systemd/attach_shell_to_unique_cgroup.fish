@@ -31,20 +31,19 @@ function attach_shell_to_unique_cgroup
 end
 
 function cgterm_nice
-    # Get or set the cgroup nice level.
+    # Get or set the cgroup nice value.
     read -l cgroup < "/proc/self/cgroup"
     set --local cpath (string replace -r '^.*::/' '' $cgroup)
     set --local arg $argv[1]
+
     if test -z "$arg"
         cat "/sys/fs/cgroup/$cpath/cpu.weight.nice"
+    else if string match --quiet --regex "\A[0-9]+\Z" "$arg"
+            and test "$arg" -le 19
+        echo "$arg" > "/sys/fs/cgroup/$cpath/cpu.weight.nice"
     else
-        if string match --quiet --regex "\A[0-9]+\Z" "$arg"
-                and test "$arg" -le 19
-            echo "$arg" > "/sys/fs/cgroup/$cpath/cpu.weight.nice"
-        else
-            echo "invalid argument"
-            return 1
-        end
+        echo "invalid argument"
+        return 1
     end
 end
 
