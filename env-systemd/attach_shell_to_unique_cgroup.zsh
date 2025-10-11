@@ -17,6 +17,8 @@ function attach_shell_to_unique_cgroup {
         alacritty|kitty|konsole|qterminal|screen|"tmux: server")
             # supported - proceed
             ;;
+        sshd-session)
+            ;;
         *) return 0
     esac
 

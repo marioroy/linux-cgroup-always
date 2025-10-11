@@ -20,6 +20,8 @@ function attach_shell_to_unique_cgroup
     switch "$cmd"
         case alacritty kitty konsole qterminal screen "tmux: server"
             # supported - proceed
+        case sshd-session
+            # supported
         case '*'
             return 0
     end
