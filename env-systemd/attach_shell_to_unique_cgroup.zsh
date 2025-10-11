@@ -14,7 +14,7 @@ function attach_shell_to_unique_cgroup {
     local cmd=""
     read -r cmd < "/proc/$PPID/comm"
     case "$cmd" in
-        alacritty|kitty|konsole|qterminal|"tmux: server")
+        alacritty|kitty|konsole|qterminal|screen|"tmux: server")
             # supported - proceed
             ;;
         *) return 0

@@ -4,9 +4,9 @@ Ghostty-like `linux-cgroup = always` feature via systemd-run. The benefit
 is overall improved desktop interactivity by preventing resource hogging,
 enhancing isolation, and ensuring fair resource distribution.
 
-This works with { `alacritty`, `kitty`, `konsole`, `qterminal`, `tmux: server` }
-and interactive shells { `bash`, `fish`, `zsh` }. Refer to the end of the readme
-for Ghostty and GNOME Terminal setup.
+This works with { `alacritty`, `kitty`, `konsole`, `qterminal`, `screen`,
+`tmux: server` } and interactive shells { `bash`, `fish`, `zsh` }.
+Refer to the end of the readme for Ghostty and GNOME Terminal setup.
 
 ## Pool Requirements for Niceness Support
 
@@ -102,16 +102,17 @@ user.slice/.../session-2.scope      306    0.2   1.1G       -        -
 system.slice                         66    0.1 444.9M       -        -
 ```
 
-## Starting tmux or Terminal Emulator from inside the shell
+## Starting tmux or Terminal Emulator interactively
 
 The `INVOCATION_ID` environment variable is set by `systemd` for all
 processes started as part of a service unit, including those launched
-via `systemd-run`. If starting `tmux` or another terminal emulator from
-inside the shell, clear the `INVOCATION_ID` variable.
+via `systemd-run`. If starting `screen`, `tmux`, or another terminal
+emulator from inside the shell, clear the `INVOCATION_ID` variable.
 
 ```bash
 $ env INVOCATION_ID= konsole -e zsh
 $ env INVOCATION_ID= qterminal -e zsh
+$ env INVOCATION_ID= screen -S my_project
 $ env INVOCATION_ID= tmux
 ```
 

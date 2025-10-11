@@ -18,7 +18,7 @@ function attach_shell_to_unique_cgroup
     set PPID (string trim --left -- $PPID)
     read -l cmd < "/proc/$PPID/comm"
     switch "$cmd"
-        case alacritty kitty konsole qterminal "tmux: server"
+        case alacritty kitty konsole qterminal screen "tmux: server"
             # supported - proceed
         case '*'
             return 0
