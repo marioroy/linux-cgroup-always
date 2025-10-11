@@ -213,10 +213,10 @@ Seconds: 7.041
 
 **cgterm_nice**
 
-Alternatively, the `cgterm_nice [-20..19]` function can be used to get/set
-the nice value using the same values as the `nice` command, ranging from
--20 to 19. A cgroup with a lower value will receive a relative larger
-CPU share.
+Alternatively, the `cgterm_nice [-20..19]` function can be used to
+get/set the value using the same values as the `nice` command, ranging
+from -20 to 19. A cgroup with a lower value will receive a relative
+larger CPU share.
 
 ```bash
 # terminal one
