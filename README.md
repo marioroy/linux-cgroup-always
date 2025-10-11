@@ -110,9 +110,9 @@ via `systemd-run`. If starting `tmux` or another terminal emulator from
 inside the shell, clear the `INVOCATION_ID` variable.
 
 ```bash
-$ env INVOCATION_ID="" konsole -e zsh
-$ env INVOCATION_ID="" qterminal -e zsh
-$ env INVOCATION_ID="" tmux
+$ env INVOCATION_ID= konsole -e zsh
+$ env INVOCATION_ID= qterminal -e zsh
+$ env INVOCATION_ID= tmux
 ```
 
 ## Helper Functions 
