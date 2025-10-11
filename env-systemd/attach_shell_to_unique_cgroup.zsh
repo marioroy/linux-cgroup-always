@@ -22,7 +22,8 @@ function attach_shell_to_unique_cgroup {
 
     # Launch shell with the cgroup CPU controller enabled.
     exec systemd-run -q --user --scope --unit="shell-$$" \
-         -p CPUAccounting=yes -p CPUQuota=$(nproc)00% -- "$ZSH_NAME"
+         -p CPUAccounting=yes -p IOAccounting=yes \
+         -p CPUQuota=$(nproc)00% -- "$ZSH_NAME"
 }
 
 function cgterm_attach {
@@ -72,7 +73,7 @@ function cgterm_detach {
 }
 
 function cgterm_nice {
-    # Get or set the cgroup nice value [0-19].
+    # Get or set the cgroup nice value [-20..19].
     local match="/user.slice/user-$UID.slice/term-"
     local cgroup cpath
     read -r cgroup < "/proc/self/cgroup"
@@ -85,7 +86,7 @@ function cgterm_nice {
             echo "cannot apply nice value to base cgroup"
             return 1
         fi
-        if [[ "$1" =~ ^[0-9]+$ ]] && (($1 <= 19)); then
+        if [[ "$1" =~ ^-?[0-9]+$ ]] && (($1 >= -20 && $1 <= 19)); then
             echo "$1" > "/sys/fs/cgroup/$cpath/cpu.weight.nice"
         else
             echo "invalid argument"
@@ -95,7 +96,7 @@ function cgterm_nice {
 }
 
 function cgterm_quota {
-    # Get or set the cgroup quota percent [10-100].
+    # Get or set the cgroup quota percent [1..100].
     local match="/user.slice/user-$UID.slice/term-"
     local cgroup cpath cpuline max period
     local nproc=$(nproc)
@@ -118,13 +119,66 @@ function cgterm_quota {
             echo "cannot apply quota to base cgroup"
             return 1
         fi
-        if [[ "$1" =~ ^[0-9]+$ ]] && (($1 >= 10 && $1 <= 100)); then
+        if [[ "$1" =~ ^[0-9]+$ ]] && (($1 >= 1 && $1 <= 100)); then
             max=$((nproc * period * $1 / 100))
             echo "$max $period" > "/sys/fs/cgroup/$cpath/cpu.max"
         else
             echo "invalid argument"
             return 1
         fi
+    fi
+}
+
+function cgterm_weight {
+    # Get or set the cgroup weight [1..10000].
+    local match="/user.slice/user-$UID.slice/term-"
+    local cgroup cpath weight
+
+    read -r cgroup < "/proc/self/cgroup"
+    cpath=${cgroup#*::/}
+
+    read -r weight < "/sys/fs/cgroup/$cpath/cpu.weight"
+
+    if [ -z "$1" ]; then
+        echo "$weight"
+    else
+        if [[ "$cgroup" = *"$match"* ]]; then
+            echo "cannot apply weight to base cgroup"
+            return 1
+        fi
+        if [[ "$1" =~ ^[0-9]+$ ]] && (($1 >= 1 && $1 <= 10000)); then
+            echo "$1" > "/sys/fs/cgroup/$cpath/cpu.weight"
+            if [ -e "/sys/fs/cgroup/$cpath/io.weight" ]; then
+                echo "$1" > "/sys/fs/cgroup/$cpath/io.weight"
+            fi
+        else
+            echo "invalid argument"
+            return 1
+        fi
+    fi
+}
+
+function cgterm_reset {
+    # Reset the cgroup nice, quota, and weight values.
+    local match="/user.slice/user-$UID.slice/term-"
+    local cgroup cpath cpuline period
+
+    read -r cgroup < "/proc/self/cgroup"
+    cpath=${cgroup#*::/}
+
+    read -r cpuline < "/sys/fs/cgroup/$cpath/cpu.max"
+    period=${cpuline#* }
+
+    if [[ "$cgroup" = *"$match"* ]]; then
+        echo "cannot reset base cgroup"
+        return 1
+    fi
+
+    echo "max $period" > "/sys/fs/cgroup/$cpath/cpu.max"
+    echo "100" > "/sys/fs/cgroup/$cpath/cpu.weight"
+
+    if [ -e "/sys/fs/cgroup/$cpath/io.weight" ]; then
+        echo "100" > "/sys/fs/cgroup/$cpath/io.weight"
     fi
 }
 

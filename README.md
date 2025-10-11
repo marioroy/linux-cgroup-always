@@ -72,9 +72,9 @@ source /path/to/env-systemd/attach_shell_to_unique_cgroup.fish
 source /path/to/env-systemd/attach_shell_to_unique_cgroup.zsh
 ```
 
-Or copy the `attach_shell_to_unique_cgroup` env file to your shell
-function folder. Call the `attach_shell_to_unique_cgroup` function
-near the top of your shell startup script.
+Or copy the env file to your shell function folder. Comment out the
+line calling `attach_shell_to_unique_cgroup`. Instead, call it near
+the top of your shell startup script.
 
 ## Verification
 
@@ -102,7 +102,22 @@ user.slice/.../session-2.scope      306    0.2   1.1G       -        -
 system.slice                         66    0.1 444.9M       -        -
 ```
 
+## Starting tmux or Terminal Emulator from inside the shell
+
+The `INVOCATION_ID` environment variable is set by `systemd` for all
+processes started as part of a service unit, including those launched
+via `systemd-run`. If starting `tmux` or another terminal emulator from
+inside the shell, clear the `INVOCATION_ID` variable.
+
+```bash
+$ env INVOCATION_ID="" konsole -e zsh
+$ env INVOCATION_ID="" qterminal -e zsh
+$ env INVOCATION_ID="" tmux
+```
+
 ## Helper Functions 
+
+**cgterm_attach**
 
 A process/thread's nice value has an effect for scheduling decisions only
 relative to other process/threads in the same task group. For nice support
@@ -123,6 +138,8 @@ $ nice -n 9 primesieve 1e12
 Seconds: 10.478
 ```
 
+**cgterm_detach**
+
 Detach reverts back to the originating cgroup. The result is the Linux kernel
 scheduler equalizes the distribution of CPU cycles across the task groups.
 
@@ -140,28 +157,13 @@ $ nice -n 9 primesieve 1e12
 Seconds: 10.510
 ```
 
-The `cgterm-nice [0-19]` function can be used to get/set the cgroup nice
-value. Applying a change to a base cgroup will emit an error.
+**cgterm_quota**
 
-```bash
-# terminal one
-$ cat /proc/self/cgroup
-0::/user.slice/.../user@1000.service/app.slice/shell-3608.scope
-$ cgterm_nice 0 (default)
-$ primesieve 1e12
-Seconds: 6.039
+The `cgterm_quota [1..100]` function can be used to get/set the max CPU
+quota percentage. The default percent is 100 with a range of 1 to 100.
 
-# terminal two
-$ cat /proc/self/cgroup
-0::/user.slice/.../user@1000.service/app.slice/shell-2715.scope
-$ cgterm_nice 9
-$ primesieve 1e12
-Seconds: 10.437
-```
-
-Alternately, the `cgterm-quota [10-100]` function can be used to get/set
-the max CPU quota percent. Likewise, applying a change to a base cgroup
-emits an error.
+Applying a change to a base cgroup emits an error. Likewise, for the
+other helper functions.
 
 ```bash
 $ cat /proc/self/cgroup
@@ -182,6 +184,68 @@ $ cgterm_attach 2
 
 $ cgterm_quota 70
 cannot apply quota to base cgroup
+```
+
+**cgterm_weight**
+
+The `cgterm_weight [1..10000]` function can be used to get/set the
+relative priority for CPU and I/O resources, when there is contention.
+A cgroup with a higher weight will receive a proportionally larger
+share. The default weight is 100 with a range of 1 to 10,000.
+
+The weight is applied to both `cpu.weight` and `io.weight`.
+
+```bash
+# terminal one
+$ cat /proc/self/cgroup
+0::/user.slice/.../user@1000.service/app.slice/shell-3608.scope
+$ cgterm_weight 100 (default)
+$ primesieve 1e12
+Seconds: 10.699
+
+# terminal two
+$ cat /proc/self/cgroup
+0::/user.slice/.../user@1000.service/app.slice/shell-2715.scope
+$ cgterm_weight 500
+$ primesieve 1e12
+Seconds: 7.041
+```
+
+**cgterm_nice**
+
+Alternatively, the `cgterm_nice [-20..19]` function can be used to get/set
+the nice value using the same values as the `nice` command, ranging from
+-20 to 19. A cgroup with a lower value will receive a relative larger
+CPU share.
+
+```bash
+# terminal one
+$ cat /proc/self/cgroup
+0::/user.slice/.../user@1000.service/app.slice/shell-3608.scope
+$ cgterm_nice 0 (default)
+$ primesieve 1e12
+Seconds: 6.039
+
+# terminal two
+$ cat /proc/self/cgroup
+0::/user.slice/.../user@1000.service/app.slice/shell-2715.scope
+$ cgterm_nice 9
+$ primesieve 1e12
+Seconds: 10.437
+```
+
+**cgterm_reset**
+
+The `cgterm_reset` function can be used to reset the cgroup2 files
+`cpu.max`, `cpu.weight`, `cpu.weight.nice`, and `io.weight` to default.
+
+```bash
+$ cgterm_reset
+
+# cpu.max          max 100000
+# cpu.weight       100
+# cpu.weight.nice  0
+# io.weight        100
 ```
 
 ## Uninstall

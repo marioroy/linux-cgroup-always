@@ -27,7 +27,8 @@ function attach_shell_to_unique_cgroup
     # Launch shell with the cgroup CPU controller enabled.
     set --local FISH (status fish-path)
     exec systemd-run -q --user --scope --unit="shell-$fish_pid" \
-         -p CPUAccounting=yes -p CPUQuota=(nproc)00% -- "$FISH"
+         -p CPUAccounting=yes -p IOAccounting=yes \
+         -p CPUQuota=(nproc)00% -- "$FISH"
 end
 
 function cgterm_attach
@@ -37,7 +38,7 @@ function cgterm_attach
 
     if test -n "$arg"
         # attach to a base cgroup, error if not [0-9]
-        if string match --quiet --regex "\A\d\Z" "$arg"
+        if string match --quiet --regex -- "\A\d\Z" "$arg"
             set --local UID (id -u)
             set --local cgroot "/sys/fs/cgroup/user.slice/user-$UID.slice"
             if test -z "$OLDCGROUP"
@@ -82,7 +83,7 @@ function cgterm_detach
 end
 
 function cgterm_nice
-    # Get or set the cgroup nice value [0-19].
+    # Get or set the cgroup nice value [-20..19].
     set --local UID (id -u)
     set --local match "/user.slice/user-$UID.slice/term-"
 
@@ -93,12 +94,13 @@ function cgterm_nice
     if test -z "$arg"
         cat "/sys/fs/cgroup/$cpath/cpu.weight.nice"
     else
-        if string match --quiet --regex "$match" "$cgroup"
+        if string match --quiet --regex -- "$match" "$cgroup"
             echo "cannot apply nice value to base cgroup"
             return 1
         end
-        if string match --quiet --regex "\A[0-9]+\Z" "$arg"
-                and test "$arg" -le 19
+        if string match --quiet --regex -- "\A-?[0-9]+\Z" "$arg"
+                and test "$arg" -ge -20
+                and test "$arg" -le  19
             echo "$arg" > "/sys/fs/cgroup/$cpath/cpu.weight.nice"
         else
             echo "invalid argument"
@@ -108,7 +110,7 @@ function cgterm_nice
 end
 
 function cgterm_quota
-    # Get or set the cgroup quota percent [10-100].
+    # Get or set the cgroup quota percent [1..100].
     set --local UID (id -u)
     set --local match "/user.slice/user-$UID.slice/term-"
 
@@ -129,12 +131,12 @@ function cgterm_quota
     if test -z "$arg"
         echo (math "$max * 100 / $nproc / $period")
     else
-        if string match --quiet --regex "$match" "$cgroup"
+        if string match --quiet --regex -- "$match" "$cgroup"
             echo "cannot apply quota to base cgroup"
             return 1
         end
-        if string match --quiet --regex "\A[0-9]+\Z" "$arg"
-                and test "$arg" -ge 10
+        if string match --quiet --regex -- "\A[0-9]+\Z" "$arg"
+                and test "$arg" -ge 1
                 and test "$arg" -le 100
             set max (math "$nproc * $period * $arg / 100")
             echo "$max $period" > "/sys/fs/cgroup/$cpath/cpu.max"
@@ -142,6 +144,63 @@ function cgterm_quota
             echo "invalid argument"
             return 1
         end
+    end
+end
+
+function cgterm_weight
+    # Get or set the cgroup weight [1..10000].
+    set --local UID (id -u)
+    set --local match "/user.slice/user-$UID.slice/term-"
+
+    read -l cgroup < "/proc/self/cgroup"
+    set --local cpath (string replace -r '^.*::/' '' $cgroup)
+    set --local arg $argv[1]
+
+    read -l weight < "/sys/fs/cgroup/$cpath/cpu.weight"
+
+    if test -z "$arg"
+        echo "$weight"
+    else
+        if string match --quiet --regex -- "$match" "$cgroup"
+            echo "cannot apply weight to base cgroup"
+            return 1
+        end
+        if string match --quiet --regex -- "\A[0-9]+\Z" "$arg"
+                and test "$arg" -ge 1
+                and test "$arg" -le 10000
+            echo "$arg" > "/sys/fs/cgroup/$cpath/cpu.weight"
+            if test -e "/sys/fs/cgroup/$cpath/io.weight"
+                echo "$arg" > "/sys/fs/cgroup/$cpath/io.weight"
+            end
+        else
+            echo "invalid argument"
+            return 1
+        end
+    end
+end
+
+function cgterm_reset
+    # Reset the cgroup nice, quota, and weight values.
+    set --local UID (id -u)
+    set --local match "/user.slice/user-$UID.slice/term-"
+
+    read -l cgroup < "/proc/self/cgroup"
+    set --local cpath (string replace -r '^.*::/' '' $cgroup)
+
+    read -l cpuline < "/sys/fs/cgroup/$cpath/cpu.max"
+    set cpuline (string split ' ' -- $cpuline)
+    set --local period $cpuline[2]
+
+    if string match --quiet --regex -- "$match" "$cgroup"
+        echo "cannot reset base cgroup"
+        return 1
+    end
+
+    echo "max $period" > "/sys/fs/cgroup/$cpath/cpu.max"
+    echo "100" > "/sys/fs/cgroup/$cpath/cpu.weight"
+
+    if test -e "/sys/fs/cgroup/$cpath/io.weight"
+        echo "100" > "/sys/fs/cgroup/$cpath/io.weight"
     end
 end
 
