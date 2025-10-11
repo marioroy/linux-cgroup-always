@@ -43,6 +43,10 @@ function cgterm_attach
         if string match --quiet --regex -- "\A\d\Z" "$arg"
             set --local UID (id -u)
             set --local cgroot "/sys/fs/cgroup/user.slice/user-$UID.slice"
+            if not test -d "$cgroot/term-$arg"
+                echo "cannot access the base cgroup 'term-$arg': not enabled"
+                return 1
+            end
             if test -z "$OLDCGROUP"
                 set -gx OLDCGROUP "$cgroup"
                 set -g  OLDCGROUP_PID (bash -c '

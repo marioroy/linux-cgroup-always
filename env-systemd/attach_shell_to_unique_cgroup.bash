@@ -37,7 +37,11 @@ function cgterm_attach {
         # attach to a base cgroup, error if not [0-9]
         if [[ "$1" = [0-9] ]]; then
             local cgroot="/sys/fs/cgroup/user.slice/user-$UID.slice"
-            if [[ -z "$OLDCGROUP" ]]; then
+            if [ ! -d "$cgroot/term-$1" ]; then
+                echo "cannot access the base cgroup 'term-$1': not enabled"
+                return 1
+            fi
+            if [ -z "$OLDCGROUP" ]; then
                 export OLDCGROUP="$cgroup"
                 OLDCGROUP_PID=$(bash -c '
                     # prevent the old cgroup from being removed
