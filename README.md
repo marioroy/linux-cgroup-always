@@ -184,7 +184,7 @@ $ cgterm_attach 2
 0::/user.slice/user-1000.slice/term-1
 
 $ cgterm_quota 70
-cannot apply quota to base cgroup
+cannot apply quota: attached to a base cgroup
 ```
 
 **cgterm_weight**
@@ -194,7 +194,7 @@ relative priority for CPU and I/O resources, when there is contention.
 A cgroup with a higher weight will receive a proportionally larger
 share. The default weight is 100 with a range of 1 to 10,000.
 
-The weight is applied to both `cpu.weight` and `io.weight`.
+The weight is applied to `cpu.weight` and `io.weight`.
 
 ```bash
 # terminal one
@@ -215,9 +215,11 @@ Seconds: 7.041
 **cgterm_nice**
 
 Alternatively, the `cgterm_nice [-20..19]` function can be used to
-get/set the value using the same values as the `nice` command, ranging
-from -20 to 19. A cgroup with a lower value will receive a relative
-larger CPU share.
+get/set the weight using the same values as the `nice` command, ranging
+from -20 to 19 (default 0). A cgroup with a lower nice value will receive
+a relative larger share.
+
+The resulting CPU weight is applied to `io.weight`, as well.
 
 ```bash
 # terminal one

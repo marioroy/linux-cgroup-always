@@ -101,13 +101,17 @@ function cgterm_nice
         cat "/sys/fs/cgroup/$cpath/cpu.weight.nice"
     else
         if string match --quiet --regex -- "$match" "$cgroup"
-            echo "cannot apply nice value to base cgroup"
+            echo "cannot apply nice value: attached to a base cgroup"
             return 1
         end
         if string match --quiet --regex -- "\A-?[0-9]+\Z" "$arg"
                 and test "$arg" -ge -20
                 and test "$arg" -le  19
-            echo "$arg" > "/sys/fs/cgroup/$cpath/cpu.weight.nice"
+            echo "$arg" > "/sys/fs/cgroup/$cpath/cpu.weight.nice" || return 1
+            if test -e "/sys/fs/cgroup/$cpath/io.weight"
+                read -l weight < "/sys/fs/cgroup/$cpath/cpu.weight"
+                echo "$weight" > "/sys/fs/cgroup/$cpath/io.weight"
+            end
         else
             echo "invalid argument"
             return 1
@@ -138,14 +142,14 @@ function cgterm_quota
         echo (math "$max * 100 / $nproc / $period")
     else
         if string match --quiet --regex -- "$match" "$cgroup"
-            echo "cannot apply quota to base cgroup"
+            echo "cannot apply quota: attached to a base cgroup"
             return 1
         end
         if string match --quiet --regex -- "\A[0-9]+\Z" "$arg"
                 and test "$arg" -ge 1
                 and test "$arg" -le 100
             set max (math "$nproc * $period * $arg / 100")
-            echo "$max $period" > "/sys/fs/cgroup/$cpath/cpu.max"
+            echo "$max $period" > "/sys/fs/cgroup/$cpath/cpu.max" || return 1
         else
             echo "invalid argument"
             return 1
@@ -168,13 +172,13 @@ function cgterm_weight
         echo "$weight"
     else
         if string match --quiet --regex -- "$match" "$cgroup"
-            echo "cannot apply weight to base cgroup"
+            echo "cannot apply weight: attached to a base cgroup"
             return 1
         end
         if string match --quiet --regex -- "\A[0-9]+\Z" "$arg"
                 and test "$arg" -ge 1
                 and test "$arg" -le 10000
-            echo "$arg" > "/sys/fs/cgroup/$cpath/cpu.weight"
+            echo "$arg" > "/sys/fs/cgroup/$cpath/cpu.weight" || return 1
             if test -e "/sys/fs/cgroup/$cpath/io.weight"
                 echo "$arg" > "/sys/fs/cgroup/$cpath/io.weight"
             end
@@ -198,13 +202,13 @@ function cgterm_reset
     set --local period $cpuline[2]
 
     if string match --quiet --regex -- "$match" "$cgroup"
-        echo "cannot reset base cgroup"
+        echo "cannot reset values: attached to a base cgroup"
         return 1
     end
 
-    echo "max $period" > "/sys/fs/cgroup/$cpath/cpu.max"
-    echo "100" > "/sys/fs/cgroup/$cpath/cpu.weight"
+    echo "max $period" > "/sys/fs/cgroup/$cpath/cpu.max" || return 1
 
+    echo "100" > "/sys/fs/cgroup/$cpath/cpu.weight" || return 1
     if test -e "/sys/fs/cgroup/$cpath/io.weight"
         echo "100" > "/sys/fs/cgroup/$cpath/io.weight"
     end
