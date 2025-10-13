@@ -27,10 +27,14 @@ function attach_shell_to_unique_cgroup
     end
 
     # Launch shell with the cgroup CPU controller enabled.
+    # Using lscpu as nproc may differ depending on CPU affinity.
+    set --local cpus (lscpu --parse=cpu)
+    set --local ncpus (math "$cpus[-1] + 1")
     set --local FISH (status fish-path)
+
     exec systemd-run -q --user --scope --unit="shell-$fish_pid" \
-         -p CPUAccounting=yes -p IOAccounting=yes \
-         -p CPUQuota=(nproc)00% -- "$FISH"
+         -p CPUAccounting=yes -p CPUQuota="$ncpus"00% -p IOAccounting=yes \
+         -p AllowedCPUs="0-$cpus[-1]" -- "$FISH"
 end
 
 function cgterm_attach
@@ -89,7 +93,7 @@ function cgterm_detach
 end
 
 function cgterm_nice
-    # Get or set the cgroup nice value [-20..19].
+    # Get or set the cgroup nice value [-20..19, idle].
     set --local UID (id -u)
     set --local match "/user.slice/user-$UID.slice/term-"
 
@@ -97,16 +101,29 @@ function cgterm_nice
     set --local cpath (string replace -r '^.*::/' '' $cgroup)
     set --local arg $argv[1]
 
+    read -l idle < "/sys/fs/cgroup/$cpath/cpu.idle"
+    read -l nice < "/sys/fs/cgroup/$cpath/cpu.weight.nice"
+
     if test -z "$arg"
-        cat "/sys/fs/cgroup/$cpath/cpu.weight.nice"
+        if test "$idle" = "1"
+            echo "idle"
+        else
+            echo "$nice"
+        end
     else
         if string match --quiet --regex -- "$match" "$cgroup"
             echo "cannot apply nice value: attached to a base cgroup"
             return 1
         end
-        if string match --quiet --regex -- "\A-?[0-9]+\Z" "$arg"
+        if test "$arg" = "idle"
+            echo "1" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
+            if test -e "/sys/fs/cgroup/$cpath/io.weight"
+                echo "1" > "/sys/fs/cgroup/$cpath/io.weight"
+            end
+        else if string match --quiet --regex -- "\A-?[0-9]+\Z" "$arg"
                 and test "$arg" -ge -20
                 and test "$arg" -le  19
+            echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
             echo "$arg" > "/sys/fs/cgroup/$cpath/cpu.weight.nice" || return 1
             if test -e "/sys/fs/cgroup/$cpath/io.weight"
                 read -l weight < "/sys/fs/cgroup/$cpath/cpu.weight"
@@ -132,14 +149,15 @@ function cgterm_quota
     set cpuline (string split ' ' -- $cpuline)
     set --local max $cpuline[1]
     set --local period $cpuline[2]
-    set --local nproc (nproc)
+    set --local cpus (lscpu --parse=cpu)
+    set --local ncpus (math "$cpus[-1] + 1")
 
     if test "$max" = "max"
-        set max (math "$nproc * $period")
+        set max (math "$ncpus * $period")
     end
 
     if test -z "$arg"
-        echo (math "$max * 100 / $nproc / $period")
+        echo (math "$max * 100 / $ncpus / $period")
     else
         if string match --quiet --regex -- "$match" "$cgroup"
             echo "cannot apply quota: attached to a base cgroup"
@@ -148,7 +166,7 @@ function cgterm_quota
         if string match --quiet --regex -- "\A[0-9]+\Z" "$arg"
                 and test "$arg" -ge 1
                 and test "$arg" -le 100
-            set max (math "$nproc * $period * $arg / 100")
+            set max (math "$ncpus * $period * $arg / 100")
             echo "$max $period" > "/sys/fs/cgroup/$cpath/cpu.max" || return 1
         else
             echo "invalid argument"
@@ -158,7 +176,7 @@ function cgterm_quota
 end
 
 function cgterm_weight
-    # Get or set the cgroup weight [1..10000].
+    # Get or set the cgroup weight [1..10000, idle].
     set --local UID (id -u)
     set --local match "/user.slice/user-$UID.slice/term-"
 
@@ -166,18 +184,29 @@ function cgterm_weight
     set --local cpath (string replace -r '^.*::/' '' $cgroup)
     set --local arg $argv[1]
 
+    read -l idle < "/sys/fs/cgroup/$cpath/cpu.idle"
     read -l weight < "/sys/fs/cgroup/$cpath/cpu.weight"
 
     if test -z "$arg"
-        echo "$weight"
+        if test "$idle" = "1"
+            echo "idle"
+        else
+            echo "$weight"
+        end
     else
         if string match --quiet --regex -- "$match" "$cgroup"
             echo "cannot apply weight: attached to a base cgroup"
             return 1
         end
-        if string match --quiet --regex -- "\A[0-9]+\Z" "$arg"
+        if test "$arg" = "idle"
+            echo "1" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
+            if test -e "/sys/fs/cgroup/$cpath/io.weight"
+                echo "1" > "/sys/fs/cgroup/$cpath/io.weight"
+            end
+        else if string match --quiet --regex -- "\A[0-9]+\Z" "$arg"
                 and test "$arg" -ge 1
                 and test "$arg" -le 10000
+            echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
             echo "$arg" > "/sys/fs/cgroup/$cpath/cpu.weight" || return 1
             if test -e "/sys/fs/cgroup/$cpath/io.weight"
                 echo "$arg" > "/sys/fs/cgroup/$cpath/io.weight"
@@ -208,6 +237,7 @@ function cgterm_reset
 
     echo "max $period" > "/sys/fs/cgroup/$cpath/cpu.max" || return 1
 
+    echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
     echo "100" > "/sys/fs/cgroup/$cpath/cpu.weight" || return 1
     if test -e "/sys/fs/cgroup/$cpath/io.weight"
         echo "100" > "/sys/fs/cgroup/$cpath/io.weight"

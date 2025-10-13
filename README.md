@@ -189,10 +189,12 @@ cannot apply quota: attached to a base cgroup
 
 **cgterm_weight**
 
-The `cgterm_weight [1..10000]` function can be used to get/set the
+The `cgterm_weight [1..10000, idle]` function can be used to get/set the
 relative priority for CPU and I/O resources, when there is contention.
 A cgroup with a higher weight will receive a proportionally larger
 share. The default weight is 100 with a range of 1 to 10,000.
+Specifying `idle` will mark the control group for "idle scheduling",
+equivalent to running the tasks with the `SCHED_IDLE` policy.
 
 The weight is applied to `cpu.weight` and `io.weight`.
 
@@ -214,10 +216,12 @@ Seconds: 7.041
 
 **cgterm_nice**
 
-Alternatively, the `cgterm_nice [-20..19]` function can be used to
+Alternatively, the `cgterm_nice [-20..19, idle]` function can be used to
 get/set the weight using the same values as the `nice` command, ranging
 from -20 to 19 (default 0). A cgroup with a lower nice value will receive
-a relative larger share.
+a relative larger share. Specifying `idle` will mark the control group
+for "idle scheduling", equivalent to running the tasks with the
+`SCHED_IDLE` policy.
 
 The resulting CPU weight is applied to `io.weight`, as well.
 
@@ -239,13 +243,13 @@ Seconds: 10.437
 
 **cgterm_reset**
 
-The `cgterm_reset` function can be used to reset the cgroup2 files
-`cpu.max`, `cpu.weight`, `cpu.weight.nice`, and `io.weight` to default.
+The `cgterm_reset` function can be used to reset the control group files.
 
 ```bash
 $ cgterm_reset
 
 # cpu.max          max 100000
+# cpu.idle         0
 # cpu.weight       100
 # cpu.weight.nice  0
 # io.weight        100
@@ -299,14 +303,17 @@ cp /usr/lib/systemd/user/gnome-terminal-server.service .
 ```
 
 Edit the file and add line `CPUQuota=100%` to the Service section.
+Add also, `AllowedCPUs=0-N` matching your system specification.
 
 ```text
 [Unit]
 Description=GNOME Terminal Server
 PartOf=graphical-session.target
+
 [Service]
 Slice=app-org.gnome.Terminal.slice
 CPUQuota=100%
+AllowedCPUs=0-15
 Type=dbus
 BusName=org.gnome.Terminal
 ExecStart=/usr/lib/gnome-terminal-server

@@ -23,9 +23,13 @@ function attach_shell_to_unique_cgroup {
     esac
 
     # Launch shell with the cgroup CPU controller enabled.
+    # Using lscpu as nproc may differ depending on CPU affinity.
+    local cpus=("${(@f)$(lscpu --parse=cpu)}")
+    local ncpus=$((${cpus[-1]} + 1))
+
     exec systemd-run -q --user --scope --unit="shell-$$" \
-         -p CPUAccounting=yes -p IOAccounting=yes \
-         -p CPUQuota=$(nproc)00% -- "$ZSH_NAME"
+         -p CPUAccounting=yes -p CPUQuota=${ncpus}00% -p IOAccounting=yes \
+         -p AllowedCPUs="0-${cpus[-1]}" -- "$ZSH_NAME"
 }
 
 function cgterm_attach {
@@ -79,20 +83,34 @@ function cgterm_detach {
 }
 
 function cgterm_nice {
-    # Get or set the cgroup nice value [-20..19].
+    # Get or set the cgroup nice value [-20..19, idle].
     local match="/user.slice/user-$UID.slice/term-"
-    local cgroup cpath
+    local cgroup cpath idle nice
+
     read -r cgroup < "/proc/self/cgroup"
     cpath=${cgroup#*::/}
 
+    read -r idle < "/sys/fs/cgroup/$cpath/cpu.idle"
+    read -r nice < "/sys/fs/cgroup/$cpath/cpu.weight.nice"
+
     if [ -z "$1" ]; then
-        cat "/sys/fs/cgroup/$cpath/cpu.weight.nice"
+        if [ "$idle" = "1" ]; then
+            echo "idle"
+        else
+            echo "$nice"
+        fi
     else
         if [[ "$cgroup" = *"$match"* ]]; then
             echo "cannot apply nice value: attached to a base cgroup"
             return 1
         fi
-        if [[ "$1" =~ ^-?[0-9]+$ ]] && (($1 >= -20 && $1 <= 19)); then
+        if [[ "$1" = "idle" ]]; then
+            echo "1" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
+            if [ -e "/sys/fs/cgroup/$cpath/io.weight" ]; then
+                echo "1" > "/sys/fs/cgroup/$cpath/io.weight"
+            fi
+        elif [[ "$1" =~ ^-?[0-9]+$ ]] && (($1 >= -20 && $1 <= 19)); then
+            echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
             echo "$1" > "/sys/fs/cgroup/$cpath/cpu.weight.nice" || return 1
             if [ -e "/sys/fs/cgroup/$cpath/io.weight" ]; then
                 local weight
@@ -110,7 +128,8 @@ function cgterm_quota {
     # Get or set the cgroup quota percent [1..100].
     local match="/user.slice/user-$UID.slice/term-"
     local cgroup cpath cpuline max period
-    local nproc=$(nproc)
+    local cpus=("${(@f)$(lscpu --parse=cpu)}")
+    local ncpus=$((${cpus[-1]} + 1))
 
     read -r cgroup < "/proc/self/cgroup"
     cpath=${cgroup#*::/}
@@ -120,18 +139,18 @@ function cgterm_quota {
     period=${cpuline#* }
 
     if [ "$max" = "max" ]; then
-        max=$((nproc * period))
+        max=$((ncpus * period))
     fi
 
     if [ -z "$1" ]; then
-        echo $((max * 100 / nproc / period))
+        echo $((max * 100 / ncpus / period))
     else
         if [[ "$cgroup" = *"$match"* ]]; then
             echo "cannot apply quota: attached to a base cgroup"
             return 1
         fi
         if [[ "$1" =~ ^[0-9]+$ ]] && (($1 >= 1 && $1 <= 100)); then
-            max=$((nproc * period * $1 / 100))
+            max=$((ncpus * period * $1 / 100))
             echo "$max $period" > "/sys/fs/cgroup/$cpath/cpu.max" || return 1
         else
             echo "invalid argument"
@@ -141,23 +160,34 @@ function cgterm_quota {
 }
 
 function cgterm_weight {
-    # Get or set the cgroup weight [1..10000].
+    # Get or set the cgroup weight [1..10000, idle].
     local match="/user.slice/user-$UID.slice/term-"
-    local cgroup cpath weight
+    local cgroup cpath idle weight
 
     read -r cgroup < "/proc/self/cgroup"
     cpath=${cgroup#*::/}
 
+    read -r idle < "/sys/fs/cgroup/$cpath/cpu.idle"
     read -r weight < "/sys/fs/cgroup/$cpath/cpu.weight"
 
     if [ -z "$1" ]; then
-        echo "$weight"
+        if [ "$idle" = "1" ]; then
+            echo "idle"
+        else
+            echo "$weight"
+        fi
     else
         if [[ "$cgroup" = *"$match"* ]]; then
             echo "cannot apply weight: attached to a base cgroup"
             return 1
         fi
-        if [[ "$1" =~ ^[0-9]+$ ]] && (($1 >= 1 && $1 <= 10000)); then
+        if [[ "$1" = "idle" ]]; then
+            echo "1" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
+            if [ -e "/sys/fs/cgroup/$cpath/io.weight" ]; then
+                echo "1" > "/sys/fs/cgroup/$cpath/io.weight"
+            fi
+        elif [[ "$1" =~ ^[0-9]+$ ]] && (($1 >= 1 && $1 <= 10000)); then
+            echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
             echo "$1" > "/sys/fs/cgroup/$cpath/cpu.weight" || return 1
             if [ -e "/sys/fs/cgroup/$cpath/io.weight" ]; then
                 echo "$1" > "/sys/fs/cgroup/$cpath/io.weight"
@@ -187,6 +217,7 @@ function cgterm_reset {
 
     echo "max $period" > "/sys/fs/cgroup/$cpath/cpu.max" || return 1
 
+    echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
     echo "100" > "/sys/fs/cgroup/$cpath/cpu.weight" || return 1
     if [ -e "/sys/fs/cgroup/$cpath/io.weight" ]; then
         echo "100" > "/sys/fs/cgroup/$cpath/io.weight"
