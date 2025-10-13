@@ -220,8 +220,7 @@ Alternatively, the `cgterm_nice [-20..19, idle]` function can be used to
 get/set the weight using the same values as the `nice` command, ranging
 from -20 to 19 (default 0). A cgroup with a lower nice value will receive
 a relative larger share. Specifying `idle` will mark the control group
-for "idle scheduling", equivalent to running the tasks with the
-`SCHED_IDLE` policy.
+for "idle scheduling", its processes become low-priority tasks.
 
 The resulting CPU weight is applied to `io.weight`, as well.
 
