@@ -126,18 +126,18 @@ function cgterm_cpus
                 cgterm_memnodes "all" "_internal_use_"
             end
         else if test "$arg" = "performance"
-            if test -z "$CGTERMS_PERFORMANCE_CPUS"
-                echo "cannot apply change: CGTERMS_PERFORMANCE_CPUS undefined"
+            if test -z "$CGTERM_PERFORMANCE_CPUS"
+                echo "cannot apply change: CGTERM_PERFORMANCE_CPUS undefined"
             else
-                echo "$CGTERMS_PERFORMANCE_CPUS" \
+                echo "$CGTERM_PERFORMANCE_CPUS" \
                     > "/sys/fs/cgroup/$cpath/cpuset.cpus" || return 1
                 cgterm_memnodes "all" "_internal_use_"
             end
         else if test "$arg" = "powersave"
-            if test -z "$CGTERMS_POWERSAVE_CPUS"
-                echo "cannot apply change: CGTERMS_POWERSAVE_CPUS undefined"
+            if test -z "$CGTERM_POWERSAVE_CPUS"
+                echo "cannot apply change: CGTERM_POWERSAVE_CPUS undefined"
             else
-                echo "$CGTERMS_POWERSAVE_CPUS" \
+                echo "$CGTERM_POWERSAVE_CPUS" \
                     > "/sys/fs/cgroup/$cpath/cpuset.cpus" || return 1
                 cgterm_memnodes "all" "_internal_use_"
             end

@@ -184,14 +184,14 @@ or powersave CPUs. Set the IDs to your CPU specification or anything
 you like e.g. leave out the SMT siblings.
 
 ```bash
-$ export CGTERMS_PERFORMANCE_CPUS="0-15"
-$ export CGTERMS_PERFORMANCE_CPUS="0,2,4,6,8,10,12,14" # exclude SMT
+$ export CGTERM_PERFORMANCE_CPUS="0-15"
+$ export CGTERM_PERFORMANCE_CPUS="0,2,4,6,8,10,12,14" # exclude SMT
 
 $ cgterm_cpus performance
 $ cgterm_cpus
 0-15
 
-$ export CGTERMS_POWERSAVE_CPUS="16-31"
+$ export CGTERM_POWERSAVE_CPUS="16-31"
 
 $ cgterm_cpus powersave
 $ cgterm_cpus
