@@ -189,13 +189,13 @@ $ export CGTERMS_PERFORMANCE_CPUS="0,2,4,6,8,10,12,14" # exclude SMT
 
 $ cgterm_cpus performance
 $ cgterm_cpus
-0-7
+0-15
 
 $ export CGTERMS_POWERSAVE_CPUS="16-31"
 
 $ cgterm_cpus powersave
 $ cgterm_cpus
-8-31
+16-31
 ```
 
 **cgterm_memnodes**
