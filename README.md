@@ -158,6 +158,72 @@ $ nice -n 9 primesieve 1e12
 Seconds: 10.510
 ```
 
+**cgterm_cpus**
+
+The `cgterm_cpus [list,range,all]` function can be used to get/set the
+CPU affinity, which restricts the tasks to a specific set of CPUs.
+
+```bash
+$ cat /proc/self/cgroup
+0::/user.slice/.../user@1000.service/app.slice/shell-3608.scope
+
+$ cgterm_cpus
+0-31
+
+$ cgterm_cpus 0-7,16,20
+$ cgterm_cpus
+0-7,16,20
+
+$ cgterm_cpus all
+$ cgterm_cpus
+0-31
+```
+
+Two user-defined environment variables can be used to set performance
+or powersave CPUs. Set the IDs to your CPU specification or anything
+you like e.g. leave out the SMT siblings.
+
+```bash
+$ export CGTERMS_PERFORMANCE_CPUS="0-15"
+$ export CGTERMS_PERFORMANCE_CPUS="0,2,4,6,8,10,12,14" # exclude SMT
+
+$ cgterm_cpus performance
+$ cgterm_cpus
+0-7
+
+$ export CGTERMS_POWERSAVE_CPUS="16-31"
+
+$ cgterm_cpus powersave
+$ cgterm_cpus
+8-31
+```
+
+**cgterm_memnodes**
+
+The `cgterm_memnodes [list,range,all]` function can be used to get/set the
+CPU affinity, which restricts the tasks to a specific set of memory nodes.
+
+Calling `cgterm_cpus` with `all`, `performance`, or `powersave` resets
+the control group `cpuset.mems` to default.
+
+```bash
+$ cat /proc/self/cgroup
+0::/user.slice/.../user@1000.service/app.slice/shell-3608.scope
+
+$ cgterm_memnodes
+0-1
+$ cgterm_cpus
+0-31
+
+$ cgterm_memnodes 0
+$ cgterm_cpus
+0-7,16-23
+
+$ cgterm_memnodes all
+$ cgterm_cpus
+0-31
+```
+
 **cgterm_quota**
 
 The `cgterm_quota [1..100]` function can be used to get/set the max CPU
@@ -252,6 +318,9 @@ $ cgterm_reset
 # cpu.weight       100
 # cpu.weight.nice  0
 # io.weight        100
+
+# cpuset.cpus      0 or 0-N
+# cpuset.mems      0 or 0-N
 ```
 
 ## Uninstall

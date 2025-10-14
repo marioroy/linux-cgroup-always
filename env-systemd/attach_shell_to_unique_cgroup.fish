@@ -92,6 +92,132 @@ function cgterm_detach
     cat "/proc/self/cgroup"
 end
 
+function cgterm_cpus
+    # Get or set the cgroup list of CPU indices or ranges.
+    set --local UID (id -u)
+    set --local match "/user.slice/user-$UID.slice/term-"
+
+    read -l cgroup < "/proc/self/cgroup"
+    set --local cpath (string replace -r '^.*::/' '' $cgroup)
+    set --local arg $argv[1]
+
+    if not test -e "/sys/fs/cgroup/$cpath/cpuset.cpus"
+        echo "cannot access cpuset.cpus: not available"
+        return 1
+    end
+
+    if test -z "$arg"
+        read -l cpus < "/sys/fs/cgroup/$cpath/cpuset.cpus"
+        if test -z "$cpus"
+            read cpus < "/sys/fs/cgroup/$cpath/cpuset.cpus.effective"
+        end
+        echo "$cpus"
+    else
+        if string match --quiet --regex -- "$match" "$cgroup"
+            echo "cannot apply change: attached to a base cgroup"
+            return 1
+        end
+        if test "$arg" = "all"
+            set --local cpus (lscpu --parse=cpu)
+            set --local last $cpus[-1]
+            echo "0-$last" > "/sys/fs/cgroup/$cpath/cpuset.cpus" || return 1
+            if test -z $argv[2]
+                # prevent recursion
+                cgterm_memnodes "all" "_internal_use_"
+            end
+        else if test "$arg" = "performance"
+            if test -z "$CGTERMS_PERFORMANCE_CPUS"
+                echo "cannot apply change: CGTERMS_PERFORMANCE_CPUS undefined"
+            else
+                echo "$CGTERMS_PERFORMANCE_CPUS" \
+                    > "/sys/fs/cgroup/$cpath/cpuset.cpus" || return 1
+                cgterm_memnodes "all" "_internal_use_"
+            end
+        else if test "$arg" = "powersave"
+            if test -z "$CGTERMS_POWERSAVE_CPUS"
+                echo "cannot apply change: CGTERMS_POWERSAVE_CPUS undefined"
+            else
+                echo "$CGTERMS_POWERSAVE_CPUS" \
+                    > "/sys/fs/cgroup/$cpath/cpuset.cpus" || return 1
+                cgterm_memnodes "all" "_internal_use_"
+            end
+        else
+            echo "$arg" > "/sys/fs/cgroup/$cpath/cpuset.cpus" || return 1
+        end
+    end
+end
+
+function cgterm_memnodes
+    # Get or set the cgroup list of memory nodes indices or ranges.
+    # Call cgterm_cpus with a list of CPUs for given memory nodes.
+    set --local UID (id -u)
+    set --local match "/user.slice/user-$UID.slice/term-"
+
+    read -l cgroup < "/proc/self/cgroup"
+    set --local cpath (string replace -r '^.*::/' '' $cgroup)
+    set --local arg $argv[1]
+
+    if not test -e "/sys/fs/cgroup/$cpath/cpuset.mems"
+        echo "cannot access cpuset.mems: not available"
+        return 1
+    end
+
+    if test -z "$arg"
+        read -l nodes < "/sys/fs/cgroup/$cpath/cpuset.mems"
+        if test -z "$nodes"
+            read nodes < "/sys/fs/cgroup/$cpath/cpuset.mems.effective"
+        end
+        echo "$nodes"
+    else
+        if string match --quiet --regex -- "$match" "$cgroup"
+            echo "cannot apply change: attached to a base cgroup"
+            return 1
+        end
+        if test "$arg" = "all"
+            set --local nodes (lscpu --parse=node)
+            set --local last $nodes[-1]
+            echo "0-$last" > "/sys/fs/cgroup/$cpath/cpuset.mems" || return 1
+            if test -z $argv[2]
+                # prevent recursion
+                cgterm_cpus "all" "_internal_use_"
+            end
+        else
+            echo "$arg" > "/sys/fs/cgroup/$cpath/cpuset.mems" || return 1
+            read -l nodes < "/sys/fs/cgroup/$cpath/cpuset.mems"
+            set nodes (string split ',' -- $nodes)
+
+            # Expand a mixed range string like "0-1,3" into a list of integers
+            set --local integers ""
+            for part in $nodes
+                if string match --quiet --regex -- "\A[0-9]+-[0-9]+\Z" "$part"
+                    set part (string split '-' -- $part)
+                    set --local begin $part[1]
+                    set --local end $part[2]
+                    set integers "$integers"(seq "$begin" "$end" | tr '\n' ' ')
+                else
+                    set integers "$integers""$part "
+                end
+            end
+            set integers (string split ' ' -- $integers)
+
+            # Build a list of CPUs connected to the memory nodes
+            set --local lscpu (lscpu --parse=cpu,node)
+            set --local cpus ""
+            for node in $integers
+                for line in $lscpu
+                    if string match --quiet --regex -- ",$node\Z" "$line"
+                        set line (string split ',' -- $line)
+                        set cpus "$cpus""$line[1] "
+                    end
+                end
+            end
+
+            # Set CPU affinity
+            cgterm_cpus "$cpus"
+        end
+    end
+end
+
 function cgterm_nice
     # Get or set the cgroup nice value [-20..19, idle].
     set --local UID (id -u)
@@ -112,7 +238,7 @@ function cgterm_nice
         end
     else
         if string match --quiet --regex -- "$match" "$cgroup"
-            echo "cannot apply nice value: attached to a base cgroup"
+            echo "cannot apply change: attached to a base cgroup"
             return 1
         end
         if test "$arg" = "idle"
@@ -160,7 +286,7 @@ function cgterm_quota
         echo (math "$max * 100 / $ncpus / $period")
     else
         if string match --quiet --regex -- "$match" "$cgroup"
-            echo "cannot apply quota: attached to a base cgroup"
+            echo "cannot apply change: attached to a base cgroup"
             return 1
         end
         if string match --quiet --regex -- "\A[0-9]+\Z" "$arg"
@@ -195,7 +321,7 @@ function cgterm_weight
         end
     else
         if string match --quiet --regex -- "$match" "$cgroup"
-            echo "cannot apply weight: attached to a base cgroup"
+            echo "cannot apply change: attached to a base cgroup"
             return 1
         end
         if test "$arg" = "idle"
@@ -236,11 +362,19 @@ function cgterm_reset
     end
 
     echo "max $period" > "/sys/fs/cgroup/$cpath/cpu.max" || return 1
-
     echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
     echo "100" > "/sys/fs/cgroup/$cpath/cpu.weight" || return 1
+
     if test -e "/sys/fs/cgroup/$cpath/io.weight"
         echo "100" > "/sys/fs/cgroup/$cpath/io.weight"
+    end
+
+    # Reset the cpuset cpus and mems values.
+    if test -e "/sys/fs/cgroup/$cpath/cpuset.cpus"
+        set --local lscpu (lscpu --parse=cpu,node)
+        set --local last (string split ',' -- $lscpu[-1])
+        echo "0-$last[1]" > "/sys/fs/cgroup/$cpath/cpuset.cpus"
+        echo "0-$last[2]" > "/sys/fs/cgroup/$cpath/cpuset.mems"
     end
 end
 

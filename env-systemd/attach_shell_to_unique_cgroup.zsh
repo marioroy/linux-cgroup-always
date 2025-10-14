@@ -82,6 +82,127 @@ function cgterm_detach {
     cat /proc/self/cgroup
 }
 
+function cgterm_cpus {
+    # Get or set the cgroup list of CPU indices or ranges.
+    local match="/user.slice/user-$UID.slice/term-"
+    local cgroup cpath
+
+    read -r cgroup < "/proc/self/cgroup"
+    cpath=${cgroup#*::/}
+
+    if [ ! -e "/sys/fs/cgroup/$cpath/cpuset.cpus" ]; then
+        echo "cannot access cpuset.cpus: not available"
+        return 1
+    fi
+
+    if [ -z "$1" ]; then
+        local cpus; read -r cpus < "/sys/fs/cgroup/$cpath/cpuset.cpus"
+        if [ -z "$cpus" ]; then
+            read -r cpus < "/sys/fs/cgroup/$cpath/cpuset.cpus.effective"
+        fi
+        echo "$cpus"
+    else
+        if [[ "$cgroup" = *"$match"* ]]; then
+            echo "cannot apply change: attached to a base cgroup"
+            return 1
+        fi
+        if [ "$1" = "all" ]; then
+            local cpus=("${(@f)$(lscpu --parse=cpu)}")
+            local last="${cpus[-1]}"
+            echo "0-$last" > "/sys/fs/cgroup/$cpath/cpuset.cpus" || return 1
+            if [ -z "$2" ]; then
+                # prevent recursion
+                cgterm_memnodes "all" "_internal_use_"
+            fi
+        elif [ "$1" = "performance" ]; then
+            if [ -z "$CGTERMS_PERFORMANCE_CPUS" ]; then
+                echo "cannot apply change: CGTERMS_PERFORMANCE_CPUS undefined"
+            else
+                echo "$CGTERMS_PERFORMANCE_CPUS" \
+                    > "/sys/fs/cgroup/$cpath/cpuset.cpus" || return 1
+                cgterm_memnodes "all" "_internal_use_"
+            fi
+        elif [ "$1" = "powersave" ]; then
+            if [ -z "$CGTERMS_POWERSAVE_CPUS" ]; then
+                echo "cannot apply change: CGTERMS_POWERSAVE_CPUS undefined"
+            else
+                echo "$CGTERMS_POWERSAVE_CPUS" \
+                    > "/sys/fs/cgroup/$cpath/cpuset.cpus" || return 1
+                cgterm_memnodes "all" "_internal_use_"
+            fi
+        else
+            echo "$1" > "/sys/fs/cgroup/$cpath/cpuset.cpus" || return 1
+        fi
+    fi
+}
+
+function cgterm_memnodes {
+    # Get or set the cgroup list of memory nodes indices or ranges.
+    # Call cgterm_cpus with a list of CPUs for given memory nodes.
+    local match="/user.slice/user-$UID.slice/term-"
+    local cgroup cpath
+
+    read -r cgroup < "/proc/self/cgroup"
+    cpath=${cgroup#*::/}
+
+    if [ ! -e "/sys/fs/cgroup/$cpath/cpuset.mems" ]; then
+        echo "cannot access cpuset.mems: not available"
+        return 1
+    fi
+
+    if [ -z "$1" ]; then
+        local nodes; read -r nodes < "/sys/fs/cgroup/$cpath/cpuset.mems"
+        if [ -z "$nodes" ]; then
+            read -r nodes < "/sys/fs/cgroup/$cpath/cpuset.mems.effective"
+        fi
+        echo "$nodes"
+    else
+        if [[ "$cgroup" = *"$match"* ]]; then
+            echo "cannot apply change: attached to a base cgroup"
+            return 1
+        fi
+        if [ "$1" = "all" ]; then
+            local nodes=("${(@f)$(lscpu --parse=node)}")
+            local last="${nodes[-1]}"
+            echo "0-$last" > "/sys/fs/cgroup/$cpath/cpuset.mems" || return 1
+            if [ -z "$2" ]; then
+                # prevent recursion
+                cgterm_cpus "all" "_internal_use_"
+            fi
+        else
+            echo "$1" > "/sys/fs/cgroup/$cpath/cpuset.mems" || return 1
+            local nodes; read -r nodes < "/sys/fs/cgroup/$cpath/cpuset.mems"
+            nodes=("${(@s:,:)nodes}")
+
+            # Expand a mixed range string like "0-1,3" into a list of integers
+            local integers="" part begin end
+            for part in "${nodes[@]}"; do
+                if [[ "$part" =~ ^[0-9]+-[0-9]+$ ]]; then
+                    begin="${part%-*}"; end="${part#*-}"
+                    integers+="$(seq "$begin" "$end" | tr '\n' ' ')"
+                else
+                    integers+="$part "
+                fi
+            done
+            integers=("${(@s: :)integers}")
+
+            # Build a list of CPUs connected to the memory nodes
+            local lscpu=("${(@f)$(lscpu --parse=cpu,node)}")
+            local cpus="" line node
+            for node in "${integers[@]}"; do
+                for line in "${lscpu[@]}"; do
+                    if [[ "$line" = *",$node" ]]; then
+                        cpus+="${line%,*} "
+                    fi
+                done
+            done
+
+            # Set CPU affinity
+            cgterm_cpus "$cpus"
+        fi
+    fi
+}
+
 function cgterm_nice {
     # Get or set the cgroup nice value [-20..19, idle].
     local match="/user.slice/user-$UID.slice/term-"
@@ -101,7 +222,7 @@ function cgterm_nice {
         fi
     else
         if [[ "$cgroup" = *"$match"* ]]; then
-            echo "cannot apply nice value: attached to a base cgroup"
+            echo "cannot apply change: attached to a base cgroup"
             return 1
         fi
         if [[ "$1" = "idle" ]]; then
@@ -146,7 +267,7 @@ function cgterm_quota {
         echo $((max * 100 / ncpus / period))
     else
         if [[ "$cgroup" = *"$match"* ]]; then
-            echo "cannot apply quota: attached to a base cgroup"
+            echo "cannot apply change: attached to a base cgroup"
             return 1
         fi
         if [[ "$1" =~ ^[0-9]+$ ]] && (($1 >= 1 && $1 <= 100)); then
@@ -178,7 +299,7 @@ function cgterm_weight {
         fi
     else
         if [[ "$cgroup" = *"$match"* ]]; then
-            echo "cannot apply weight: attached to a base cgroup"
+            echo "cannot apply change: attached to a base cgroup"
             return 1
         fi
         if [[ "$1" = "idle" ]]; then
@@ -216,11 +337,19 @@ function cgterm_reset {
     fi
 
     echo "max $period" > "/sys/fs/cgroup/$cpath/cpu.max" || return 1
-
     echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
     echo "100" > "/sys/fs/cgroup/$cpath/cpu.weight" || return 1
+
     if [ -e "/sys/fs/cgroup/$cpath/io.weight" ]; then
         echo "100" > "/sys/fs/cgroup/$cpath/io.weight"
+    fi
+
+    # Reset the cpuset cpus and mems values.
+    if [ -e "/sys/fs/cgroup/$cpath/cpuset.cpus" ]; then
+        local lscpu=("${(@f)$(lscpu --parse=cpu,node)}")
+        local last="${lscpu[-1]}"
+        echo "0-${last%,*}" > "/sys/fs/cgroup/$cpath/cpuset.cpus"
+        echo "0-${last#*,}" > "/sys/fs/cgroup/$cpath/cpuset.mems"
     fi
 }
 
