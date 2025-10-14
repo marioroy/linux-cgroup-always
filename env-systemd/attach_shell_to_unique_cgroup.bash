@@ -179,22 +179,20 @@ function cgterm_memnodes {
             for part in "${nodes[@]}"; do
                 if [[ "$part" =~ ^[0-9]+-[0-9]+$ ]]; then
                     begin="${part%-*}"; end="${part#*-}"
-                    integers+="$(seq "$begin" "$end" | tr '\n' ' ')"
+                    integers+="$(seq "$begin" "$end" | tr '\n' '|')"
                 else
-                    integers+="$part "
+                    integers+="$part|"
                 fi
             done
-            integers=(${integers// / })
 
             # Build a list of CPUs connected to the memory nodes
+            local regex=",(${integers%|*})$"
             local lscpu=(); readarray -t lscpu < <(lscpu --parse=cpu,node)
-            local cpus="" line node
-            for node in "${integers[@]}"; do
-                for line in "${lscpu[@]}"; do
-                    if [[ "$line" = *",$node" ]]; then
-                        cpus+="${line%,*} "
-                    fi
-                done
+            local cpus="" line
+            for line in "${lscpu[@]}"; do
+                if [[ "$line" =~ $regex ]]; then
+                    cpus+="${line%,*} "
+                fi
             done
 
             # Set CPU affinity

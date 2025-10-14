@@ -193,22 +193,20 @@ function cgterm_memnodes
                     set part (string split '-' -- $part)
                     set --local begin $part[1]
                     set --local end $part[2]
-                    set integers "$integers"(seq "$begin" "$end" | tr '\n' ' ')
+                    set integers "$integers"(seq "$begin" "$end" | tr '\n' '|')
                 else
-                    set integers "$integers""$part "
+                    set integers "$integers""$part|"
                 end
             end
-            set integers (string split ' ' -- $integers)
 
             # Build a list of CPUs connected to the memory nodes
+            set integers (string trim -r -c '|' $integers)
             set --local lscpu (lscpu --parse=cpu,node)
             set --local cpus ""
-            for node in $integers
-                for line in $lscpu
-                    if string match --quiet --regex -- ",$node\Z" "$line"
-                        set line (string split ',' -- $line)
-                        set cpus "$cpus""$line[1] "
-                    end
+            for line in $lscpu
+                if string match --quiet --regex -- ",($integers)\Z" "$line"
+                    set line (string split ',' -- $line)
+                    set cpus "$cpus""$line[1] "
                 end
             end
 
