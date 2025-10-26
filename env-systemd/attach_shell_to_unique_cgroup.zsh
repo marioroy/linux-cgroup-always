@@ -28,7 +28,7 @@ function attach_shell_to_unique_cgroup {
     local ncpus=$((${cpus[-1]} + 1))
 
     exec systemd-run -q --user --scope --unit="shell-$$" \
-         -p CPUAccounting=yes -p CPUQuota=${ncpus}00% -p IOAccounting=yes \
+         -p CPUQuota=${ncpus}00% -p IOAccounting=yes \
          -p AllowedCPUs="0-${cpus[-1]}" -- "$ZSH_NAME"
 }
 

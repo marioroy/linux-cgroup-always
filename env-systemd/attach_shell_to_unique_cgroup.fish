@@ -33,7 +33,7 @@ function attach_shell_to_unique_cgroup
     set --local FISH (status fish-path)
 
     exec systemd-run -q --user --scope --unit="shell-$fish_pid" \
-         -p CPUAccounting=yes -p CPUQuota="$ncpus"00% -p IOAccounting=yes \
+         -p CPUQuota="$ncpus"00% -p IOAccounting=yes \
          -p AllowedCPUs="0-$cpus[-1]" -- "$FISH"
 end
 
