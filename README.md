@@ -255,10 +255,10 @@ cannot apply quota: attached to a base cgroup
 
 **cgterm_weight**
 
-The `cgterm_weight [1..10000, idle]` function can be used to get/set the
-relative priority for CPU and I/O resources, when there is contention.
-A cgroup with a higher weight will receive a proportionally larger
-share. The default weight is 100 with a range of 1 to 10,000.
+The `cgterm_weight [1..10000, idle, normal]` function can be used to
+get/set the relative priority for CPU and I/O resources, when there is
+contention. A cgroup with a higher weight will receive a proportionally
+larger share. The normal weight is 100 with a range of 1 to 10,000.
 Specifying `idle` will mark the control group for "idle scheduling",
 equivalent to running the tasks with the `SCHED_IDLE` policy.
 
@@ -282,11 +282,11 @@ Seconds: 7.041
 
 **cgterm_nice**
 
-Alternatively, the `cgterm_nice [-20..19, idle]` function can be used to
-get/set the weight using the same values as the `nice` command, ranging
-from -20 to 19 (default 0). A cgroup with a lower nice value will receive
-a relative larger share. Specifying `idle` will mark the control group
-for "idle scheduling", its processes become low-priority tasks.
+Alternatively, the `cgterm_nice [-20..19, idle, normal]` function can be
+used to get/set the weight using the same values as the `nice` command,
+ranging from -20 to 19 (normal 0). A cgroup with a lower nice value will
+receive a relative larger share. Specifying `idle` will mark the control
+group for "idle scheduling", its processes become low-priority tasks.
 
 The resulting CPU weight is applied to `io.weight`, as well.
 
@@ -399,7 +399,7 @@ systemctl --user restart gnome-terminal-server.service
 
 ## Acknowledgement
 
-Thank you, to the CachyOS community with sounding board and testing.
+Thank you, CachyOS community with sounding board and testing.
 
 - ms178
 - nutcase

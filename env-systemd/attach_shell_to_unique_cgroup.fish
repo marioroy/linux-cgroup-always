@@ -217,7 +217,7 @@ function cgterm_memnodes
 end
 
 function cgterm_nice
-    # Get or set the cgroup nice value [-20..19, idle].
+    # Get or set the cgroup nice value [-20..19, idle, normal].
     set --local UID (id -u)
     set --local match "/user.slice/user-$UID.slice/term-"
 
@@ -243,6 +243,12 @@ function cgterm_nice
             echo "1" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
             if test -e "/sys/fs/cgroup/$cpath/io.weight"
                 echo "1" > "/sys/fs/cgroup/$cpath/io.weight"
+            end
+        else if test "$arg" = "normal"
+            echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
+            echo "100" > "/sys/fs/cgroup/$cpath/cpu.weight" || return 1
+            if test -e "/sys/fs/cgroup/$cpath/io.weight"
+                echo "100" > "/sys/fs/cgroup/$cpath/io.weight"
             end
         else if string match --quiet --regex -- "\A-?[0-9]+\Z" "$arg"
                 and test "$arg" -ge -20
@@ -300,7 +306,7 @@ function cgterm_quota
 end
 
 function cgterm_weight
-    # Get or set the cgroup weight [1..10000, idle].
+    # Get or set the cgroup weight [1..10000, idle, normal].
     set --local UID (id -u)
     set --local match "/user.slice/user-$UID.slice/term-"
 
@@ -326,6 +332,12 @@ function cgterm_weight
             echo "1" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
             if test -e "/sys/fs/cgroup/$cpath/io.weight"
                 echo "1" > "/sys/fs/cgroup/$cpath/io.weight"
+            end
+        else if test "$arg" = "normal"
+            echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
+            echo "100" > "/sys/fs/cgroup/$cpath/cpu.weight" || return 1
+            if test -e "/sys/fs/cgroup/$cpath/io.weight"
+                echo "100" > "/sys/fs/cgroup/$cpath/io.weight"
             end
         else if string match --quiet --regex -- "\A[0-9]+\Z" "$arg"
                 and test "$arg" -ge 1

@@ -202,7 +202,7 @@ function cgterm_memnodes {
 }
 
 function cgterm_nice {
-    # Get or set the cgroup nice value [-20..19, idle].
+    # Get or set the cgroup nice value [-20..19, idle, normal].
     local match="/user.slice/user-$UID.slice/term-"
     local cgroup cpath idle nice
 
@@ -227,6 +227,12 @@ function cgterm_nice {
             echo "1" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
             if [ -e "/sys/fs/cgroup/$cpath/io.weight" ]; then
                 echo "1" > "/sys/fs/cgroup/$cpath/io.weight"
+            fi
+        elif [[ "$1" = "normal" ]]; then
+            echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
+            echo "100" > "/sys/fs/cgroup/$cpath/cpu.weight" || return 1
+            if [ -e "/sys/fs/cgroup/$cpath/io.weight" ]; then
+                echo "100" > "/sys/fs/cgroup/$cpath/io.weight"
             fi
         elif [[ "$1" =~ ^-?[0-9]+$ ]] && (($1 >= -20 && $1 <= 19)); then
             echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
@@ -279,7 +285,7 @@ function cgterm_quota {
 }
 
 function cgterm_weight {
-    # Get or set the cgroup weight [1..10000, idle].
+    # Get or set the cgroup weight [1..10000, idle, normal].
     local match="/user.slice/user-$UID.slice/term-"
     local cgroup cpath idle weight
 
@@ -304,6 +310,12 @@ function cgterm_weight {
             echo "1" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
             if [ -e "/sys/fs/cgroup/$cpath/io.weight" ]; then
                 echo "1" > "/sys/fs/cgroup/$cpath/io.weight"
+            fi
+        elif [[ "$1" = "normal" ]]; then
+            echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
+            echo "100" > "/sys/fs/cgroup/$cpath/cpu.weight" || return 1
+            if [ -e "/sys/fs/cgroup/$cpath/io.weight" ]; then
+                echo "100" > "/sys/fs/cgroup/$cpath/io.weight"
             fi
         elif [[ "$1" =~ ^[0-9]+$ ]] && (($1 >= 1 && $1 <= 10000)); then
             echo "0" > "/sys/fs/cgroup/$cpath/cpu.idle" || return 1
