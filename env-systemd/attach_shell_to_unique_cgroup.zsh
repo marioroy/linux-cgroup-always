@@ -164,6 +164,8 @@ function cgterm_memnodes {
         if [ "$1" = "all" ]; then
             local nodes=("${(@f)$(lscpu --parse=node)}")
             local last="${nodes[-1]}"
+            # Check for null in case NUMA disabled from kernel config
+            [[ -z "$last" || "$last" = "# Node" ]] && last=0
             echo "0-$last" > "/sys/fs/cgroup/$cpath/cpuset.mems" || return 1
             if [ -z "$2" ]; then
                 # prevent recursion
@@ -196,7 +198,11 @@ function cgterm_memnodes {
             done
 
             # Set CPU affinity
-            cgterm_cpus "$cpus"
+            if [ -z "$cpus" ]; then
+                cgterm_cpus all
+            else
+                cgterm_cpus "$cpus"
+            fi
         fi
     fi
 }
@@ -358,8 +364,11 @@ function cgterm_reset {
     if [ -e "/sys/fs/cgroup/$cpath/cpuset.cpus" ]; then
         local lscpu=("${(@f)$(lscpu --parse=cpu,node)}")
         local last="${lscpu[-1]}"
+        local lastnode=${last#*,}
+        # Check for null in case NUMA disabled from kernel config
+        [ -z "$lastnode" ] && lastnode=0
         echo "0-${last%,*}" > "/sys/fs/cgroup/$cpath/cpuset.cpus"
-        echo "0-${last#*,}" > "/sys/fs/cgroup/$cpath/cpuset.mems"
+        echo "0-$lastnode" > "/sys/fs/cgroup/$cpath/cpuset.mems"
     fi
 }
 
