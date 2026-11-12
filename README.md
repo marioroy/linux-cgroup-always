@@ -8,54 +8,6 @@ This works with { `alacritty`, `kitty`, `konsole`, `qterminal`, `screen`,
 `tmux: server` } and interactive shells { `bash`, `fish`, `zsh` }.
 Refer to the end of the readme for Ghostty and GNOME Terminal setup.
 
-## Pool Requirements for Niceness Support
-
-Niceness support refers to calling the nice command across multiple terminal
-windows or panes, made possible by attaching to the same cgroup. This requires
-the `libcgroup` package and have the `cgconfig.service` enabled.
-
-Steps for Arch-based distributions:
-
-```bash
-source ~/.config/user-dirs.dirs
-cd "$XDG_DOWNLOAD_DIR"
-git clone --depth=1 https://aur.archlinux.org/libcgroup.git
-cd libcgroup
-
-gpg --keyserver keyserver.ubuntu.com --recv-keys E050B79D5B290D03
-makepkg -si
-
-sudo systemctl enable --now cgconfig.service
-```
-
-## Attach Shell to Unique Cgroup
-
-**Installation**
-
-The installer adds 10 entries to `/etc/cgconfig.conf`, ending in `{0..9}`.
-
-```text
-$ ./cgconfig.install
-
-Adding pool of cgroup entries to /etc/cgconfig.conf
-group user.slice/user-ID.slice/term-0 {
-        perm {
-                admin {
-                        uid = [USER];
-                        gid = [USER];
-                }
-                task {
-                        tuid = [USER];
-                        tgid = [USER];
-                }
-        }
-}
-...
-Adding and enabling set-owner-cgroup-procs-ID.service
-Created symlink '/etc/systemd/system/sysinit.target.wants/set-owner...
-Please reboot the machine for the changes to take effect
-```
-
 ## Shell Activation
 
 Preferably, source the environment file near the top of your shell
@@ -117,46 +69,6 @@ $ env INVOCATION_ID= tmux
 ```
 
 ## Helper Functions 
-
-**cgterm_attach**
-
-A process/thread's nice value has an effect for scheduling decisions only
-relative to other process/threads in the same task group. For nice support
-across multiple terminal windows or panes, call helper function with `[0-9]`
-to attach multiple emulators to the same base cgroup.
-
-```bash
-# terminal one
-$ cgterm_attach 1
-0::/user.slice/user-1000.slice/term-1
-$ nice -n 0 primesieve 1e12
-Seconds: 6.144
-
-# terminal two
-$ cgterm_attach 1
-0::/user.slice/user-1000.slice/term-1
-$ nice -n 9 primesieve 1e12
-Seconds: 10.478
-```
-
-**cgterm_detach**
-
-Detach reverts back to the originating cgroup. The result is the Linux kernel
-scheduler equalizes the distribution of CPU cycles across the task groups.
-
-```bash
-# terminal one
-$ cgterm_detach
-0::/user.slice/.../user@1000.service/app.slice/shell-3608.scope
-$ nice -n 0 primesieve 1e12
-Seconds: 10.434
-
-# terminal two
-$ cgterm_detach
-0::/user.slice/.../user@1000.service/app.slice/shell-2715.scope
-$ nice -n 9 primesieve 1e12
-Seconds: 10.510
-```
 
 **cgterm_cpus**
 
@@ -229,9 +141,6 @@ $ cgterm_cpus
 The `cgterm_quota [1..100]` function can be used to get/set the max CPU
 quota percentage. The default percent is 100 with a range of 1 to 100.
 
-Applying a change to a base cgroup emits an error. Likewise, for the
-other helper functions.
-
 ```bash
 $ cat /proc/self/cgroup
 0::/user.slice/.../user@1000.service/app.slice/shell-3608.scope
@@ -245,12 +154,6 @@ Seconds: 5.224
 $ cgterm_quota 50
 $ primesieve 1e12
 Seconds: 10.543
-
-$ cgterm_attach 2
-0::/user.slice/user-1000.slice/term-1
-
-$ cgterm_quota 70
-cannot apply quota: attached to a base cgroup
 ```
 
 **cgterm_weight**
